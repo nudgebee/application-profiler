@@ -3,6 +3,11 @@ package publish
 import (
 	"bufio"
 	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
@@ -10,9 +15,6 @@ import (
 	fileutils "github.com/josepdcs/kubectl-prof/pkg/util/file"
 	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
-	"io"
-	"os"
-	"time"
 )
 
 // Publisher is the interface that wraps the basic Do method in order to publish the profiling result
@@ -60,24 +62,30 @@ func (p publisher) Do(compressorType compressor.Type, file string, eventType api
 	if err != nil {
 		return errors.Wrapf(err, "could not save compressed file %s", resultFile)
 	}
+	cmd := exec.Command("cat", file)
+	stdout, err := cmd.Output()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	fmt.Println(string(stdout))
+	// // get the size of the result file from stat command
+	// var outStat bytes.Buffer
+	// cmd := exec.Command("stat", "-c%s", resultFile)
+	// cmd.Stdout = &outStat
+	// _ = cmd.Run()
 
-	// get the size of the result file from stat command
-	var outStat bytes.Buffer
-	cmd := exec.Command("stat", "-c%s", resultFile)
-	cmd.Stdout = &outStat
-	_ = cmd.Run()
-
-	return log.EventLn(
-		api.Result,
-		api.ResultData{
-			Time:            time.Now(),
-			ResultType:      eventType,
-			File:            resultFile,
-			FileSizeInBytes: fileutils.GetSize(resultFile),
-			Checksum:        fileutils.GetChecksum(resultFile),
-			CompressorType:  string(compressorType),
-		},
-	)
+	// return log.EventLn(
+	// 	api.Result,
+	// 	api.ResultData{
+	// 		Time:            time.Now(),
+	// 		ResultType:      eventType,
+	// 		File:            resultFile,
+	// 		FileSizeInBytes: fileutils.GetSize(resultFile),
+	// 		Checksum:        fileutils.GetChecksum(resultFile),
+	// 		CompressorType:  string(compressorType),
+	// 	},
+	// )
+	return nil
 }
 
 // DoWithNativeGzipAndSplit compress the file with gzip and split the result file in chunks
