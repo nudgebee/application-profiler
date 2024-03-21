@@ -62,12 +62,16 @@ func (p publisher) Do(compressorType compressor.Type, file string, eventType api
 	if err != nil {
 		return errors.Wrapf(err, "could not save compressed file %s", resultFile)
 	}
+	fmt.Println("Starting cat command")
 	cmd := exec.Command("cat", file)
 	stdout, err := cmd.Output()
 	if err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("End of cat command")
+		return err
 	}
 	fmt.Println(string(stdout))
+	fmt.Println("End of cat command")
+
 	// // get the size of the result file from stat command
 	// var outStat bytes.Buffer
 	// cmd := exec.Command("stat", "-c%s", resultFile)
