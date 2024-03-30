@@ -35,7 +35,7 @@ jobs:
           file: 'docker/jvm/alpine/Dockerfile'
           push: true
           tags: |
-            280501305789.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-jvm:${{ env.tag }}
+            740395098545.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-jvm:${{ env.tag }}
 
       - name: Build and Push BPF Agent Image
         uses: docker/build-push-action@v3
@@ -44,7 +44,7 @@ jobs:
           file: 'docker/bpf/Dockerfile'
           push: true
           tags: |
-            280501305789.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-bpf:${{ env.tag }}
+            740395098545.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-bpf:${{ env.tag }}
 
       - name: Build and Push Python Agent Image
         uses: docker/build-push-action@v3
@@ -53,7 +53,7 @@ jobs:
           file: 'docker/python/Dockerfile'
           push: true
           tags: |
-            280501305789.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-python:${{ env.tag }}
+            740395098545.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-python:${{ env.tag }}
 
       - name: Build and Push Perf Agent Image
         uses: docker/build-push-action@v3
@@ -62,4 +62,4 @@ jobs:
           file: 'docker/perf/Dockerfile'
           push: true
           tags: |
-            280501305789.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-perf:${{ env.tag }}
+            740395098545.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-perf:${{ env.tag }}
