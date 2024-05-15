@@ -3,7 +3,6 @@ package publish
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -62,34 +61,24 @@ func (p publisher) Do(compressorType compressor.Type, file string, eventType api
 	if err != nil {
 		return errors.Wrapf(err, "could not save compressed file %s", resultFile)
 	}
-	fmt.Println("Starting cat command")
-	cmd := exec.Command("cat", file)
-	stdout, err := cmd.Output()
-	if err != nil {
-		fmt.Println("End of cat command")
-		return err
-	}
-	fmt.Println(string(stdout))
-	fmt.Println("End of cat command")
 
-	// // get the size of the result file from stat command
-	// var outStat bytes.Buffer
-	// cmd := exec.Command("stat", "-c%s", resultFile)
-	// cmd.Stdout = &outStat
-	// _ = cmd.Run()
+	// get the size of the result file from stat command
+	var outStat bytes.Buffer
+	cmd := exec.Command("stat", "-c%s", resultFile)
+	cmd.Stdout = &outStat
+	_ = cmd.Run()
 
-	// return log.EventLn(
-	// 	api.Result,
-	// 	api.ResultData{
-	// 		Time:            time.Now(),
-	// 		ResultType:      eventType,
-	// 		File:            resultFile,
-	// 		FileSizeInBytes: fileutils.GetSize(resultFile),
-	// 		Checksum:        fileutils.GetChecksum(resultFile),
-	// 		CompressorType:  string(compressorType),
-	// 	},
-	// )
-	return nil
+	return log.EventLn(
+		api.Result,
+		api.ResultData{
+			Time:            time.Now(),
+			ResultType:      eventType,
+			File:            resultFile,
+			FileSizeInBytes: fileutils.GetSize(resultFile),
+			Checksum:        fileutils.GetChecksum(resultFile),
+			CompressorType:  string(compressorType),
+		},
+	)
 }
 
 // DoWithNativeGzipAndSplit compress the file with gzip and split the result file in chunks
