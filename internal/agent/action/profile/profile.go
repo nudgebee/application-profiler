@@ -54,7 +54,7 @@ func NewAction(args map[string]interface{}) (profiler.Profiler, *job.ProfilingJo
 }
 
 func Run(p profiler.Profiler, job *job.ProfilingJob) error {
-	// _ = log.EventLn(api.Progress, &api.ProgressData{Time: time.Now(), Stage: api.Started})
+	_ = log.EventLn(api.Progress, &api.ProgressData{Time: time.Now(), Stage: api.Started})
 
 	err := p.SetUp(job)
 	if err != nil {
@@ -75,7 +75,7 @@ func Run(p profiler.Profiler, job *job.ProfilingJob) error {
 		}
 	}
 
-	//_ = log.EventLn(api.Progress, &api.ProgressData{Time: time.Now(), Stage: api.Ended})
+	_ = log.EventLn(api.Progress, &api.ProgressData{Time: time.Now(), Stage: api.Ended})
 
 	return nil
 }
