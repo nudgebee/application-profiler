@@ -6,7 +6,7 @@ WORKDIR /go/src/github.com/josepdcs/kubectl-prof/cmd/agent
 RUN go build -o /go/bin/agent
 
 FROM python:3.11.2-slim-bullseye AS pyspybuild
-RUN pip3 install py-spy==0.3.14
+RUN pip3 install py-spy==0.3.14 austin-dist
 RUN apt-get update && apt-get install -y git
 RUN git clone https://github.com/brendangregg/FlameGraph
 
@@ -16,6 +16,7 @@ RUN mkdir -p /app/FlameGraph
 COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 COPY --from=pyspybuild /usr/local/bin/py-spy /app/py-spy
+COPY --from=pyspybuild /usr/local/bin/austin /app/austin
 COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/get-ps-command.sh /app/get-ps-command.sh
 RUN chmod +x /app/get-ps-command.sh
 

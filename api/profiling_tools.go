@@ -15,10 +15,11 @@ const (
 	Perf          ProfilingTool = "perf"
 	Rbspy         ProfilingTool = "rbspy"
 	FakeTool      ProfilingTool = "fake"
+	AustinPython  ProfilingTool = "austin-python"
 )
 
 var (
-	profilingTools = []ProfilingTool{AsyncProfiler, Jcmd, Pyspy, Bpf, Perf, Rbspy}
+	profilingTools = []ProfilingTool{AsyncProfiler, Jcmd, Pyspy, Bpf, Perf, Rbspy, AustinPython}
 )
 
 func AvailableProfilingTools() []ProfilingTool {
@@ -40,7 +41,7 @@ var GetProfilingTool = func(l ProgrammingLanguage, o OutputType) ProfilingTool {
 			return AsyncProfiler
 		}
 	case Python:
-		return Pyspy
+		return AustinPython
 	case Go, Node, Rust:
 		return Bpf
 	case Clang, ClangPlusPlus:
@@ -57,7 +58,7 @@ var GetProfilingTool = func(l ProgrammingLanguage, o OutputType) ProfilingTool {
 // The first one is considered the default
 var GetProfilingToolsByProgrammingLanguage = map[ProgrammingLanguage][]ProfilingTool{
 	Java:          {Jcmd, AsyncProfiler},
-	Python:        {Pyspy},
+	Python:        {AustinPython},
 	Go:            {Bpf},
 	Node:          {Bpf, Perf},
 	Clang:         {Bpf, Perf},
