@@ -30,7 +30,7 @@ const (
 var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string) *exec.Cmd {
 	interval := strconv.Itoa(int(job.Interval.Seconds()))
 	args := []string{}
-	args = append(args, "-p", pid, "-o", fileName, "-x", interval)
+	args = append(args, "-p", pid, "-o", fileName, "-x", interval, "-m")
 	return commander.Command(austinLocation, args...)
 }
 
@@ -106,7 +106,6 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 
 	var out bytes.Buffer
 	var stderr bytes.Buffer
-
 	fileName := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, pid, job.Iteration)
 	if job.OutputType == api.FlameGraph {
 		fileName = common.GetResultFile(common.TmpDir(), job.Tool, api.Raw, pid, job.Iteration)

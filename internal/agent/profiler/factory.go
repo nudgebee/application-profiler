@@ -1,12 +1,13 @@
 package profiler
 
 import (
+	"time"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
 	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/jvm"
 	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
-	"time"
 )
 
 // Profiler is the interface that wraps the basic profiling operations.
@@ -34,6 +35,8 @@ func Get(tool api.ProfilingTool) Profiler {
 		return NewPerfProfiler(executil.NewCommander(), publish.NewPublisher())
 	case api.Rbspy:
 		return NewRubyProfiler(executil.NewCommander(), publish.NewPublisher())
+	case api.Austin:
+		return NewAustinPythonProfiler(executil.NewCommander(), publish.NewPublisher())
 	default:
 		// util for tests
 		return NewMockProfiler()
