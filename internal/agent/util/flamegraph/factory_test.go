@@ -1,10 +1,11 @@
 package flamegraph
 
 import (
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGet(t *testing.T) {
@@ -17,19 +18,19 @@ func TestGet(t *testing.T) {
 			name: "should return flame grapher for python",
 			job:  &job.ProfilingJob{Language: api.Python, Event: api.Cpu},
 			want: NewFlameGrapherScript(
-				WithTitle("PYTHON - CPU Flamegraph")),
+				WithTitle("PYTHON - Flamegraph")),
 		},
 		{
 			name: "should return flame grapher for golang",
 			job:  &job.ProfilingJob{Language: api.Go, Event: api.Cpu},
 			want: NewFlameGrapherScript(
-				WithTitle("GO - CPU Flamegraph")),
+				WithTitle("GO - Flamegraph")),
 		},
 		{
 			name: "should return flame grapher for node",
 			job:  &job.ProfilingJob{Language: api.Node, Event: api.Cpu},
 			want: NewFlameGrapherScript(
-				WithTitle("NODE - CPU Flamegraph"),
+				WithTitle("NODE - Flamegraph"),
 				WithColors("js")),
 		},
 		{
