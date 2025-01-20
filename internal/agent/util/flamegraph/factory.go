@@ -2,9 +2,10 @@ package flamegraph
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"strings"
 )
 
 // FrameGrapher is an interface for converting stacks samples to flame graphs
@@ -15,7 +16,7 @@ type FrameGrapher interface {
 // Get returns an instance of FrameGrapher
 func Get(job *job.ProfilingJob) FrameGrapher {
 	language := strings.ToTitle(string(job.Language))
-	title := fmt.Sprintf("%s - CPU Flamegraph", language)
+	title := fmt.Sprintf("%s - Flamegraph", language)
 	switch job.Language {
 	case api.Python, api.Go:
 		return NewFlameGrapherScript(
