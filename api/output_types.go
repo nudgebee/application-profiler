@@ -35,6 +35,7 @@ var GetOutputTypesByProfilingTool = map[ProfilingTool][]OutputType{
 	Perf:          {FlameGraph, Raw},
 	Rbspy:         {FlameGraph, SpeedScope, Callgrind, Summary, SummaryByLine},
 	FakeTool:      {FlameGraph},
+	Austin:        {FlameGraph, Raw},
 }
 
 func AvailableOutputTypesString() string {
