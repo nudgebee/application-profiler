@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/alitto/pond"
 	"github.com/josepdcs/kubectl-prof/api"
@@ -17,16 +21,13 @@ import (
 	"github.com/josepdcs/kubectl-prof/pkg/util/file"
 	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
-	"os"
-	"strconv"
-	"time"
 )
 
 const (
 	perfLocation                    = "/app/perf"
-	perfRecordOutputFileName        = "/tmp/perf-%s-%d.data"
+	perfRecordOutputFileName        = "/tempperf-%s-%d.data"
 	flameGraphStackCollapseLocation = "/app/FlameGraph/stackcollapse-perf.pl"
-	perfScriptOutputFileName        = "/tmp/perf-%s-%d.out"
+	perfScriptOutputFileName        = "/tempperf-%s-%d.out"
 	perfDelayBetweenJobs            = 2 * time.Second
 )
 
