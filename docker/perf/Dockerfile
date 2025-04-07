@@ -1,4 +1,4 @@
-FROM golang:1.23-bullseye-alpine AS agentbuild
+FROM golang:1.23-bullseye AS agentbuild
 WORKDIR /go/src/github.com/josepdcs/kubectl-prof
 ADD . /go/src/github.com/josepdcs/kubectl-prof
 RUN go get -d -v ./...
