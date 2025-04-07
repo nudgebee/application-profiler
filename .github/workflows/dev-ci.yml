@@ -8,6 +8,12 @@ jobs:
   goreleaser:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Checkout
         uses: actions/checkout@main
 
@@ -31,6 +37,7 @@ jobs:
       - name: Build and Push JVM Alpine Agent Image
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/amd64,linux/arm64
           context: .
           file: 'docker/jvm/alpine/Dockerfile'
           push: true
@@ -40,6 +47,7 @@ jobs:
       - name: Build and Push BPF Agent Image
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/amd64,linux/arm64
           context: .
           file: 'docker/bpf/Dockerfile'
           push: true
@@ -49,6 +57,7 @@ jobs:
       - name: Build and Push Python Agent Image
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/amd64,linux/arm64
           context: .
           file: 'docker/python/Dockerfile'
           push: true
@@ -58,6 +67,7 @@ jobs:
       - name: Build and Push Perf Agent Image
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/amd64,linux/arm64
           context: .
           file: 'docker/perf/Dockerfile'
           push: true
