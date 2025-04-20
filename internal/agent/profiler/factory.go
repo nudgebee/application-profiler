@@ -37,6 +37,8 @@ func Get(tool api.ProfilingTool) Profiler {
 		return NewRubyProfiler(executil.NewCommander(), publish.NewPublisher())
 	case api.Austin:
 		return NewAustinPythonProfiler(executil.NewCommander(), publish.NewPublisher())
+	case api.PProf:
+		return NewGoPprofProfiler(executil.NewCommander(), publish.NewPublisher())
 	default:
 		// util for tests
 		return NewMockProfiler()
