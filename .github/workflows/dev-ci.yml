@@ -37,7 +37,7 @@ jobs:
       - name: Build and Push JVM Alpine Agent Image
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           file: 'docker/jvm/alpine/Dockerfile'
           push: true
@@ -47,7 +47,7 @@ jobs:
       - name: Build and Push BPF Agent Image
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           file: 'docker/bpf/Dockerfile'
           push: true
@@ -57,7 +57,7 @@ jobs:
       - name: Build and Push Python Agent Image
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           file: 'docker/python/Dockerfile'
           push: true
