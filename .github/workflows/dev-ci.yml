@@ -67,7 +67,7 @@ jobs:
       - name: Build and Push Perf Agent Image
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           context: .
           file: 'docker/perf/Dockerfile'
           push: true
