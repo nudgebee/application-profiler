@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	profilingTools = []ProfilingTool{AsyncProfiler, Jcmd, Pyspy, Bpf, Perf, Rbspy, Austin}
+	profilingTools = []ProfilingTool{AsyncProfiler, Jcmd, Pyspy, Bpf, Perf, Rbspy, Austin, PProf}
 )
 
 func AvailableProfilingTools() []ProfilingTool {
