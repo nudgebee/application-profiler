@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 FROM golang:1.23-bullseye AS agentbuild
-=======
-FROM golang:1.23.4-bullseye AS agentbuild
->>>>>>> upstream/main
 WORKDIR /go/src/github.com/josepdcs/kubectl-prof
 COPY . /go/src/github.com/josepdcs/kubectl-prof
 RUN go get -d -v ./...
