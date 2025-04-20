@@ -2,6 +2,7 @@ package job
 
 import (
 	"errors"
+
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -29,6 +30,9 @@ func Get(lang api.ProgrammingLanguage, tool api.ProfilingTool) (Creator, error) 
 	case api.Go, api.Clang, api.ClangPlusPlus, api.Node, api.Rust:
 		if tool == api.Perf {
 			return &perfCreator{}, nil
+		}
+		if tool == api.NodeDummy {
+			return &dummyCreator{}, nil
 		}
 		return &bpfCreator{}, nil
 	case api.Python:

@@ -3,6 +3,10 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
@@ -12,9 +16,6 @@ import (
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/fake"
 	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
-	"regexp"
-	"strings"
-	"time"
 )
 
 const (
@@ -26,6 +27,7 @@ const (
 type Container interface {
 	RootFileSystemLocation(containerID string, containerRuntimePath string) (string, error)
 	PID(containerID string, containerRuntimePath string) (string, error)
+	CWD(containerID string, containerRuntimePath string) (string, error)
 }
 
 // NormalizeContainerID returns the container ID with suffixes removed
@@ -49,6 +51,8 @@ var runtime = func(r api.ContainerRuntime) (Container, error) {
 		return fake.NewRuntimeFake().WithRootFileSystemLocationResultError(), nil
 	case api.FakeContainerWithPIDResultError:
 		return fake.NewRuntimeFake().WithPIDResultError(), nil
+	case api.FakeContainerWithCWDResultError:
+		return fake.NewRuntimeFake().WithCWDResultError(), nil
 	default:
 		return nil, errors.Errorf("unsupported container runtime: %s", r)
 	}
@@ -66,6 +70,38 @@ func ContainerFileSystem(r api.ContainerRuntime, containerID string, containerRu
 		return "", err
 	}
 	return c.RootFileSystemLocation(containerID, containerRuntimePath)
+}
+
+// GetRootPID returns the PID of the container's root process
+func GetRootPID(job *job.ProfilingJob) (string, error) {
+	if job.ContainerRuntime == "" || job.ContainerID == "" {
+		return "", errors.New(ContainerRuntimeAndContainerIdMandatoryText)
+	}
+	c, err := runtime(job.ContainerRuntime)
+	if err != nil {
+		return "", err
+	}
+	pid, err := c.PID(job.ContainerID, job.ContainerRuntimePath)
+	if err != nil {
+		return "", err
+	}
+	return pid, nil
+}
+
+// GetCWD returns the current working directory of the container's root process
+func GetCWD(job *job.ProfilingJob) (string, error) {
+	if job.ContainerRuntime == "" || job.ContainerID == "" {
+		return "", errors.New(ContainerRuntimeAndContainerIdMandatoryText)
+	}
+	c, err := runtime(job.ContainerRuntime)
+	if err != nil {
+		return "", err
+	}
+	cwd, err := c.CWD(job.ContainerID, job.ContainerRuntimePath)
+	if err != nil {
+		return "", err
+	}
+	return cwd, nil
 }
 
 type ChildPIDGetter interface {
@@ -179,4 +215,16 @@ func filterPIDsToProfile(pids *[]string, pgrep string) error {
 	}
 	*pids = filteredPIDs
 	return nil
+}
+
+func GetFirstCandidatePID(rootPID string) string {
+	child := childPIDGetterInstance.get(rootPID)
+	if stringUtils.IsBlank(child) {
+		return rootPID
+	}
+	pids := strings.Split(child, "\n")
+	if len(pids) == 1 {
+		return strings.TrimSpace(pids[0])
+	}
+	return rootPID
 }

@@ -2,12 +2,18 @@ package crio
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	jsoniter "github.com/json-iterator/go"
 	rspec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"os"
-	"strconv"
+)
+
+const (
+	containerIDMandaToryError = "container ID is mandatory"
+	containerRuntimePathError = "container runtime path is mandatory"
 )
 
 type Crio struct {
@@ -25,12 +31,13 @@ var crioStateFile = func(containerID string, containerRuntimePath string) string
 	return fmt.Sprintf("%s/overlay-containers/%s/userdata/state.json", containerRuntimePath, containerID)
 }
 
+// RootFileSystemLocation returns the root filesystem location of the container
 func (c *Crio) RootFileSystemLocation(containerID string, containerRuntimePath string) (string, error) {
 	if stringUtils.IsBlank(containerID) {
-		return "", errors.New("container ID is mandatory")
+		return "", errors.New(containerIDMandaToryError)
 	}
 	if stringUtils.IsBlank(containerRuntimePath) {
-		return "", errors.New("container runtime path is mandatory")
+		return "", errors.New(containerRuntimePathError)
 	}
 
 	spec, err := runtimeSpec(crioConfigFile(containerID, containerRuntimePath))
@@ -41,6 +48,7 @@ func (c *Crio) RootFileSystemLocation(containerID string, containerRuntimePath s
 
 }
 
+// PID returns the PID of the container
 func runtimeSpec(configFile string) (rspec.Spec, error) {
 	file, err := os.ReadFile(configFile)
 	if err != nil {
@@ -56,12 +64,13 @@ func runtimeSpec(configFile string) (rspec.Spec, error) {
 	return result, nil
 }
 
+// PID returns the PID of the container
 func (c *Crio) PID(containerID string, containerRuntimePath string) (string, error) {
 	if stringUtils.IsBlank(containerID) {
-		return "", errors.New("container ID is mandatory")
+		return "", errors.New(containerIDMandaToryError)
 	}
 	if stringUtils.IsBlank(containerRuntimePath) {
-		return "", errors.New("container runtime path is mandatory")
+		return "", errors.New(containerRuntimePathError)
 	}
 
 	state, err := runtimeState(crioStateFile(containerID, containerRuntimePath))
@@ -72,6 +81,7 @@ func (c *Crio) PID(containerID string, containerRuntimePath string) (string, err
 
 }
 
+// runtimeState reads the runtime state from the container runtime
 func runtimeState(stateFile string) (rspec.State, error) {
 	file, err := os.ReadFile(stateFile)
 	if err != nil {
@@ -85,4 +95,21 @@ func runtimeState(stateFile string) (rspec.State, error) {
 	}
 
 	return result, nil
+}
+
+// CWD returns the current working directory of the container
+func (c *Crio) CWD(containerID string, containerRuntimePath string) (string, error) {
+	if stringUtils.IsBlank(containerID) {
+		return "", errors.New(containerIDMandaToryError)
+	}
+	if stringUtils.IsBlank(containerRuntimePath) {
+		return "", errors.New(containerRuntimePathError)
+	}
+
+	spec, err := runtimeSpec(crioConfigFile(containerID, containerRuntimePath))
+	if err != nil {
+		return "", err
+	}
+	return spec.Process.Cwd, nil
+
 }

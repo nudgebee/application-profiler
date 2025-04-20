@@ -1,12 +1,13 @@
 package profiler
 
 import (
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
 )
 
 func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
@@ -49,9 +50,8 @@ func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
 							PodName:       "PodName",
 							Namespace:     "Namespace",
 						},
-						Job:                nil,
-						EphemeralContainer: nil,
-						LogLevel:           "",
+						Job:      nil,
+						LogLevel: "",
 					},
 				}
 			},
@@ -100,9 +100,8 @@ func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
 							PodName:       "PodName",
 							Namespace:     "Namespace",
 						},
-						Job:                nil,
-						EphemeralContainer: nil,
-						LogLevel:           "",
+						Job:      nil,
+						LogLevel: "",
 					},
 				}
 			},
@@ -126,9 +125,8 @@ func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
 							PodName:       "PodName",
 							Namespace:     "Namespace",
 						},
-						Job:                nil,
-						EphemeralContainer: nil,
-						LogLevel:           "",
+						Job:      nil,
+						LogLevel: "",
 					},
 				}
 			},
@@ -177,9 +175,8 @@ func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
 							PodName:       "PodName",
 							Namespace:     "Namespace",
 						},
-						Job:                nil,
-						EphemeralContainer: nil,
-						LogLevel:           "",
+						Job:      nil,
+						LogLevel: "",
 					},
 				}
 			},
@@ -228,9 +225,8 @@ func Test_validatePodAndRetrieveContainerInfo(t *testing.T) {
 							PodName:       "PodName",
 							Namespace:     "Namespace",
 						},
-						Job:                nil,
-						EphemeralContainer: nil,
-						LogLevel:           "",
+						Job:      nil,
+						LogLevel: "",
 					},
 				}
 			},

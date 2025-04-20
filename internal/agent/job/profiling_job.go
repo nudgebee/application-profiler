@@ -1,11 +1,12 @@
 package job
 
 import (
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
 	jsoniter "github.com/json-iterator/go"
-	"time"
 )
 
 const (
@@ -29,6 +30,7 @@ type ProfilingJob struct {
 	HeapDumpSplitInChunkSize string
 	PID                      string
 	Pgrep                    string
+	NodeHeapSnapshotSignal   int
 	AdditionalArguments      map[string]string
 	Iteration                int
 }

@@ -1,12 +1,13 @@
 package common
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/config"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
 	"github.com/stretchr/testify/assert"
-	"path/filepath"
-	"testing"
 )
 
 func TestGetResultFileWithPID(t *testing.T) {
@@ -499,6 +500,51 @@ func TestGetFileExtension(t *testing.T) {
 				return args{
 					tool:       api.Bpf,
 					OutputType: api.FlameGraph,
+				}
+			},
+			when: func(args args) string {
+				return GetFileExtension(args.tool, args.OutputType)
+			},
+			then: func(t *testing.T, result string) {
+				assert.Equal(t, ".svg", result)
+			},
+		},
+		{
+			name: "with HeapSnapshot when node dummy",
+			given: func() args {
+				return args{
+					tool:       api.NodeDummy,
+					OutputType: api.HeapSnapshot,
+				}
+			},
+			when: func(args args) string {
+				return GetFileExtension(args.tool, args.OutputType)
+			},
+			then: func(t *testing.T, result string) {
+				assert.Equal(t, ".heapsnapshot", result)
+			},
+		},
+		{
+			name: "with default when node dummy",
+			given: func() args {
+				return args{
+					tool:       api.NodeDummy,
+					OutputType: "unknown",
+				}
+			},
+			when: func(args args) string {
+				return GetFileExtension(args.tool, args.OutputType)
+			},
+			then: func(t *testing.T, result string) {
+				assert.Equal(t, ".svg", result)
+			},
+		},
+		{
+			name: "default",
+			given: func() args {
+				return args{
+					tool:       "unknown",
+					OutputType: "unknown",
 				}
 			},
 			when: func(args args) string {

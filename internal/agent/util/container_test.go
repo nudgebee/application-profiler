@@ -1,6 +1,11 @@
 package util
 
 import (
+	"os"
+	"os/exec"
+	"strconv"
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
 	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/common"
@@ -9,10 +14,6 @@ import (
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/crio"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/fake"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"os/exec"
-	"strconv"
-	"testing"
 )
 
 func TestNormalizeContainerID(t *testing.T) {
@@ -161,7 +162,6 @@ type childPIDGetterMock struct {
 	interation int
 }
 
-// getChildPID returns the PID of the child process of the given PID
 func (c *childPIDGetterMock) get(string) string {
 	defer func() { c.interation++ }()
 	if c.interation >= len(c.results) {
@@ -353,6 +353,55 @@ func Test_childPIDGetter_get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := childPIDGetter{}
 			assert.Equalf(t, tt.want, c.get(tt.args.pid), "get(%v)", tt.args.pid)
+		})
+	}
+}
+
+func TestGetFirstCandidatePID(t *testing.T) {
+	tests := []struct {
+		name     string
+		rootPID  string
+		mockFunc func()
+		want     string
+	}{
+		{
+			name:    "not child process",
+			rootPID: "1234",
+			mockFunc: func() {
+				childPIDGetterInstance = &childPIDGetterMock{
+					interation: 0,
+					results:    []string{""},
+				}
+			},
+			want: "1234",
+		},
+		{
+			name:    "child process",
+			rootPID: "1234",
+			mockFunc: func() {
+				childPIDGetterInstance = &childPIDGetterMock{
+					interation: 0,
+					results:    []string{"1235"},
+				}
+			},
+			want: "1235",
+		},
+		{
+			name:    "more than one child process",
+			rootPID: "1234",
+			mockFunc: func() {
+				childPIDGetterInstance = &childPIDGetterMock{
+					interation: 0,
+					results:    []string{"1235\n1236"},
+				}
+			},
+			want: "1234",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockFunc()
+			assert.Equalf(t, tt.want, GetFirstCandidatePID(tt.rootPID), "GetFirstCandidatePID(%v)", tt.rootPID)
 		})
 	}
 }

@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/alitto/pond"
 	"github.com/josepdcs/kubectl-prof/api"
@@ -17,9 +21,6 @@ import (
 	"github.com/josepdcs/kubectl-prof/pkg/util/file"
 	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
-	"os"
-	"strconv"
-	"time"
 )
 
 const (
@@ -192,7 +193,7 @@ func (m *perfManager) foldPerfOutput(job *job.ProfilingJob, pid string) (error, 
 func (m *perfManager) handleFlamegraph(job *job.ProfilingJob, flameGrapher flamegraph.FrameGrapher, rawFileName string,
 	flameFileName string) error {
 	if job.OutputType == api.FlameGraph {
-		if file.GetSize(rawFileName) < common.MinimumRawSize {
+		if file.Size(rawFileName) < common.MinimumRawSize {
 			return fmt.Errorf("unable to generate flamegraph: no stacks found (maybe due low cpu load)")
 		}
 		// convert raw format to flamegraph

@@ -1,6 +1,8 @@
 package job
 
 import (
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/josepdcs/kubectl-prof/internal/cli/kubernetes"
 	"github.com/stretchr/testify/assert"
@@ -8,7 +10,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
 )
 
 func Test_jvmCreate_create(t *testing.T) {
@@ -115,7 +116,7 @@ func Test_jvmCreate_create(t *testing.T) {
 							SecurityContext: &apiv1.SecurityContext{
 								Privileged: &cfg.Job.Privileged,
 								Capabilities: &apiv1.Capabilities{
-									Add: []apiv1.Capability{"SYS_ADMIN"},
+									Add: jvmDefaultCapabilities,
 								},
 							},
 							Resources: resources,
