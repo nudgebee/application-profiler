@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"strconv"
@@ -26,10 +27,10 @@ func (d *dummyPublisher) DoWithNativeGzipAndSplit(compressor string, path string
 
 func TestGoPprofProfiler_Invoke(t *testing.T) {
 	// Start a pprof HTTP server
-	// go http.ListenAndServe("127.0.0.1:6060", nil)
-	// time.Sleep(100 * time.Millisecond)
+	go http.ListenAndServe("127.0.0.1:6060", nil)
+	time.Sleep(100 * time.Millisecond)
 
-	pid := strconv.Itoa(82390)
+	pid := strconv.Itoa(os.Getpid())
 	commander := executil.NewFakeCommander()
 	p := NewGoPprofProfiler(commander, &dummyPublisher{})
 

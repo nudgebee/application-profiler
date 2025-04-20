@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -114,7 +115,10 @@ func findListeningPortForPID(pid string) (string, error) {
 			if host == "" && port == "" {
 				continue
 			}
-			return port, nil
+			// Validate port before returning
+			if _, err := strconv.Atoi(port); err == nil {
+				return port, nil
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
