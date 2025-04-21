@@ -2,6 +2,7 @@ package profiler
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -12,19 +13,24 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agrison/go-commons-lang/stringUtils"
+	"github.com/alitto/pond"
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/config"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
 	common "github.com/josepdcs/kubectl-prof/internal/agent/profiler/common"
+	"github.com/josepdcs/kubectl-prof/internal/agent/util"
 	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
 	"github.com/josepdcs/kubectl-prof/pkg/util/file"
+	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
 // GoPprofProfiler uses Go's pprof HTTP server to collect profiles.
 type GoPprofProfiler struct {
-	manager *goPprofManager
+	manager    *goPprofManager
+	targetPIDs []string
 }
 
 type goPprofManager struct {
@@ -39,16 +45,41 @@ func NewGoPprofProfiler(commander executil.Commander, publisher publish.Publishe
 
 // SetUp ensures the job has a valid PID.
 func (p *GoPprofProfiler) SetUp(job *job.ProfilingJob) error {
-	if job.PID == "" {
-		return errors.New("PID is required for GoPprofProfiler")
+	if stringUtils.IsNotBlank(job.PID) {
+		p.targetPIDs = []string{job.PID}
+		return nil
 	}
+
+	pids, err := util.GetCandidatePIDs(job)
+	if err != nil {
+		return err
+	}
+	log.DebugLogLn(fmt.Sprintf("The PIDs to be profiled: %s", pids))
+	p.targetPIDs = pids
 	return nil
 }
 
 // Invoke runs the profiling job and returns execution time.
 func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-	err := p.manager.fetchProfileFromPID(job)
+	pool := pond.New(len(p.targetPIDs), 0, pond.MinWorkers(len(p.targetPIDs)))
+	defer pool.StopAndWait()
+	// create a task group associated to a context
+	group, _ := pool.GroupContext(context.Background())
+	// submit tasks to profile
+	for _, pid := range p.targetPIDs {
+		pid := pid
+		group.Submit(func() error {
+			job.PID = pid
+			err := p.manager.fetchProfileFromPID(job)
+			return err
+		})
+		// wait a bit between jobs for not overloading the system
+		time.Sleep(2 * time.Second)
+	}
+	// wait for all tasks to finish
+	err := group.Wait()
+
 	return err, time.Since(start)
 }
 
