@@ -4,12 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -24,9 +21,8 @@ import (
 	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
 	"github.com/josepdcs/kubectl-prof/pkg/util/file"
-	commonLog "github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 )
 
 // GoPprofProfiler uses Go's pprof HTTP server to collect profiles.
@@ -56,7 +52,7 @@ func (p *GoPprofProfiler) SetUp(job *job.ProfilingJob) error {
 	if err != nil {
 		return err
 	}
-	commonLog.DebugLogLn(fmt.Sprintf("The PIDs to be profiled: %s", pids))
+	log.DebugLogLn(fmt.Sprintf("The PIDs to be profiled: %s", pids))
 	p.targetPIDs = pids
 	return nil
 }
@@ -66,7 +62,9 @@ func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
 	pool := pond.New(len(p.targetPIDs), 0, pond.MinWorkers(len(p.targetPIDs)))
 	defer pool.StopAndWait()
+	// create a task group associated to a context
 	group, _ := pool.GroupContext(context.Background())
+	// submit tasks to profile
 	for _, pid := range p.targetPIDs {
 		pid := pid
 		group.Submit(func() error {
@@ -74,20 +72,21 @@ func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 			err := p.manager.fetchProfileFromPID(job)
 			return err
 		})
+		// wait a bit between jobs for not overloading the system
 		time.Sleep(2 * time.Second)
 	}
+	// wait for all tasks to finish
 	err := group.Wait()
+
 	return err, time.Since(start)
 }
 
-// fetchProfileFromPID fetches the pprof profile from the application's HTTP endpoint by
-// entering the target PID's net namespace and using Go's HTTP client.
 func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	port, err := findListeningPortForPID(job.PID)
 	if err != nil {
-		commonLog.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, err))
+		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, err))
 		port = "8080"
-		commonLog.DebugLogLn(fmt.Sprintf("using default port %s", port))
+		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
 
 	profileType := "profile"
@@ -95,10 +94,19 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		profileType = "heap"
 	}
 
-	targetURL := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
+	// Build the real HTTP URL
+	targetURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
 		port, profileType, int(job.Interval.Seconds()),
 	)
 
+	// Shell out to nsenter + wget
+	cmd := exec.Command(
+		"nsenter", "-t", job.PID, "--",
+		"wget", "-qO", "-", targetURL,
+	)
+
+	// Capture stdout of the command directly into a file
 	rawFile := common.GetResultFile(common.TmpDir(), job.Tool, api.Pprof, job.PID, job.Iteration)
 	out, err := os.Create(rawFile)
 	if err != nil {
@@ -106,115 +114,53 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	}
 	defer out.Close()
 
-	// Enter target PID's network namespace
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	cmd.Stdout = out
+	cmd.Stderr = os.Stderr // so you’ll see any wget errors in your logs
 
-	origNS, err := os.Open("/proc/self/ns/net")
-	if err != nil {
-		return errors.Wrap(err, "opening original netns")
-	}
-	defer origNS.Close()
-
-	targetNS, err := os.Open(fmt.Sprintf("/proc/%s/ns/net", job.PID))
-	if err != nil {
-		return errors.Wrapf(err, "opening netns of PID %s", job.PID)
-	}
-	defer targetNS.Close()
-
-	if err := unix.Setns(int(targetNS.Fd()), unix.CLONE_NEWNET); err != nil {
-		return errors.Wrapf(err, "setns into PID %s netns", job.PID)
-	}
-	// Revert namespace on exit
-	defer func() {
-		if err := unix.Setns(int(origNS.Fd()), unix.CLONE_NEWNET); err != nil {
-			commonLog.ErrorLogLn(fmt.Sprintf(
-				"failed to revert to original netns: %v", err,
-			))
-		}
-	}()
-
-	// Perform HTTP GET inside target netns
-	resp, err := http.Get(targetURL)
-	if err != nil {
-		return errors.Wrapf(err, "http.Get %s", targetURL)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("pprof HTTP error: %s", resp.Status)
+	if err := cmd.Run(); err != nil {
+		return errors.Wrapf(err, "failed to nsenter+wget %q", targetURL)
 	}
 
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		return errors.Wrap(err, "failed to write profile")
-	}
-
+	// Finally, publish the file as before
 	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
 }
 
-// findListeningPortForPID discovers the HTTP pprof listening port for the given PID by
-// entering its netns, running lsof, and parsing the first LISTEN port.
+// findListeningPortForPID discovers the HTTP pprof listening port for the given PID.
 func findListeningPortForPID(pid string) (string, error) {
-	commonLog.DebugLogLn(fmt.Sprintf("Looking for LISTEN ports in netns of PID %s", pid))
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	origNS, err := os.Open("/proc/self/ns/net")
+	// run lsof to list all LISTEN sockets for this PID
+	cmd := exec.Command("nsenter", "-t", pid, "lsof", "-Pan", "-p", pid, "-iTCP", "-sTCP:LISTEN")
+	output, err := cmd.Output()
 	if err != nil {
-		return "", errors.Wrap(err, "opening original netns")
-	}
-	defer origNS.Close()
-
-	targetNS, err := os.Open(fmt.Sprintf("/proc/%s/ns/net", pid))
-	if err != nil {
-		return "", errors.Wrapf(err, "opening netns of PID %s", pid)
-	}
-	defer targetNS.Close()
-
-	if err := unix.Setns(int(targetNS.Fd()), unix.CLONE_NEWNET); err != nil {
-		return "", errors.Wrapf(err, "setns into PID %s netns", pid)
-	}
-	defer func() {
-		if err := unix.Setns(int(origNS.Fd()), unix.CLONE_NEWNET); err != nil {
-			commonLog.ErrorLogLn(fmt.Sprintf("failed to revert netns: %v", err))
-		}
-	}()
-
-	cmd := exec.Command("lsof", "-Pan", "-p", pid, "-iTCP", "-sTCP:LISTEN")
-	outBytes, err := cmd.CombinedOutput()
-	if err != nil {
-		commonLog.ErrorLogLn(fmt.Sprintf("lsof failed in PID %s netns: %v\n%s", pid, err, string(outBytes)))
-		return "", errors.Wrap(err, "running lsof inside netns")
+		return "", errors.Wrap(err, "failed to run lsof")
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(outBytes)))
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		line := scanner.Text()
-		commonLog.DebugLogLn(fmt.Sprintf("lsof> %s", line))
-
 		if !strings.Contains(line, "LISTEN") {
 			continue
 		}
-		for _, field := range strings.Fields(line) {
-			host, port, err := net.SplitHostPort(field)
+		fields := strings.Fields(line)
+		for _, f := range fields {
+			// attempt to split “host:port”
+			host, port, err := net.SplitHostPort(f)
 			if err != nil {
 				continue
 			}
-			if _, err := strconv.Atoi(port); err != nil {
+			// sanity‐check that it really is a TCP listen port
+			if host == "" && port == "" {
 				continue
 			}
-			commonLog.InfoLogLn(fmt.Sprintf("Found listening port %s (host %s) for PID %s", port, host, pid))
-			return port, nil
+			// Validate port before returning
+			if _, err := strconv.Atoi(port); err == nil {
+				return port, nil
+			}
 		}
 	}
-	if scanErr := scanner.Err(); scanErr != nil {
-		commonLog.ErrorLogLn(fmt.Sprintf("error reading lsof output: %v", scanErr))
-		return "", scanErr
+	if err := scanner.Err(); err != nil {
+		return "", err
 	}
-
-	commonLog.ErrorLogLn(fmt.Sprintf("no LISTEN port found for PID %s", pid))
-	return "", errors.New("no listening port found for PID " + pid)
+	return "", errors.New("no listening port found for PID")
 }
 
 // CleanUp removes temporary profiling files.
