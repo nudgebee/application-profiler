@@ -97,7 +97,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		profileType = "heap"
 	}
 
-	url := fmt.Sprintf("nsenter", "-t", job.PID, "http://127.0.0.1:%s/debug/pprof/%s?seconds=%d", port, profileType, int(job.Interval.Seconds()))
+	url := fmt.Sprintf("nsenter -t %s http://127.0.0.1:%s/debug/pprof/%s?seconds=%d", job.PID, port, profileType, int(job.Interval.Seconds()))
 	resp, err := http.Get(url)
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch pprof from %s", url)
