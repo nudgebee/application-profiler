@@ -97,7 +97,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		profileType = "heap"
 	}
 
-	url := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/%s?seconds=%d", port, profileType, int(job.Interval.Seconds()))
+	url := fmt.Sprintf("nsenter", "-t", job.PID, "http://127.0.0.1:%s/debug/pprof/%s?seconds=%d", port, profileType, int(job.Interval.Seconds()))
 	resp, err := http.Get(url)
 	if err != nil {
 		return errors.Wrapf(err, "failed to fetch pprof from %s", url)
@@ -125,7 +125,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 // findListeningPortForPID discovers the HTTP pprof listening port for the given PID.
 func findListeningPortForPID(pid string) (string, error) {
 	// run lsof to list all LISTEN sockets for this PID
-	cmd := exec.Command("lsof", "-Pan", "-p", pid, "-iTCP", "-sTCP:LISTEN")
+	cmd := exec.Command("nsenter", "-t", pid, "lsof", "-Pan", "-p", pid, "-iTCP", "-sTCP:LISTEN")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run lsof")
