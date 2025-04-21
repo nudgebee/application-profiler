@@ -10,7 +10,7 @@ RUN apk add --no-cache git  \
     && git clone https://github.com/brendangregg/FlameGraph
 
 FROM alpine:3.21.0
-RUN apk add --no-cache bash bcc-tools perl procps strace util-linux \
+RUN apk add --no-cache bash bcc-tools perl procps strace util-linux  iproute2 \
     && mkdir -p /app/FlameGraph
 COPY --from=builder /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app

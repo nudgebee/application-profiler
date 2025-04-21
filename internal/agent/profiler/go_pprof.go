@@ -2,9 +2,9 @@ package profiler
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -102,7 +102,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 
 	// Shell out to nsenter + wget
 	cmd := exec.Command(
-		"nsenter", "-t", job.PID, "--",
+		"nsenter", "-t", job.PID, "-n",
 		"wget", "-qO", "-", targetURL,
 	)
 
@@ -125,35 +125,31 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
 }
 
-// findListeningPortForPID discovers the HTTP pprof listening port for the given PID.
 func findListeningPortForPID(pid string) (string, error) {
-	// run lsof to list all LISTEN sockets for this PID
-	cmd := exec.Command("nsenter", "-t", pid, "lsof", "-Pan", "-p", pid, "-iTCP", "-sTCP:LISTEN")
+	// nsenter into the PID's network namespace and list listening TCP sockets
+	cmd := exec.Command("nsenter", "-t", pid, "-n", "ss", "-tulnp")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to run lsof")
+		return "", errors.Wrap(err, "failed to run ss")
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.Contains(line, "LISTEN") {
 			continue
 		}
-		fields := strings.Fields(line)
-		for _, f := range fields {
-			// attempt to split “host:port”
-			host, port, err := net.SplitHostPort(f)
-			if err != nil {
-				continue
-			}
-			// sanity‐check that it really is a TCP listen port
-			if host == "" && port == "" {
-				continue
-			}
-			// Validate port before returning
-			if _, err := strconv.Atoi(port); err == nil {
-				return port, nil
+		// optionally: ensure the line really belongs to our PID
+		if !strings.Contains(line, pid) {
+			continue
+		}
+		for _, field := range strings.Fields(line) {
+			// look for any field containing a colon
+			if idx := strings.LastIndex(field, ":"); idx > 0 && idx < len(field)-1 {
+				portPart := field[idx+1:]
+				if _, err := strconv.Atoi(portPart); err == nil {
+					return portPart, nil
+				}
 			}
 		}
 	}
