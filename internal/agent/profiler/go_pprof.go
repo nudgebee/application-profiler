@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -97,28 +95,33 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		profileType = "heap"
 	}
 
-	url := fmt.Sprintf("nsenter -t %s http://127.0.0.1:%s/debug/pprof/%s?seconds=%d", job.PID, port, profileType, int(job.Interval.Seconds()))
-	resp, err := http.Get(url)
-	if err != nil {
-		return errors.Wrapf(err, "failed to fetch pprof from %s", url)
-	}
-	defer resp.Body.Close()
+	// Build the real HTTP URL
+	targetURL := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
+		port, profileType, int(job.Interval.Seconds()),
+	)
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("pprof HTTP error: %s", resp.Status)
-	}
+	// Shell out to nsenter + curl
+	cmd := exec.Command(
+		"nsenter", "-t", job.PID, "--",
+		"curl", "-s", "--fail", targetURL,
+	)
 
+	// Capture stdout of the command directly into a file
 	rawFile := common.GetResultFile(common.TmpDir(), job.Tool, api.Pprof, job.PID, job.Iteration)
-
 	out, err := os.Create(rawFile)
 	if err != nil {
 		return errors.Wrap(err, "could not create profile file")
 	}
 	defer out.Close()
 
-	if _, err = io.Copy(out, resp.Body); err != nil {
-		return errors.Wrap(err, "failed to write profile")
+	cmd.Stdout = out
+	cmd.Stderr = os.Stderr // so you’ll see any curl errors in your logs
+
+	if err := cmd.Run(); err != nil {
+		return errors.Wrapf(err, "failed to nsenter+curl %q", targetURL)
 	}
+
+	// Finally, publish the file as before
 	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
 }
 
