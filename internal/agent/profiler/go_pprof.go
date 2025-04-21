@@ -87,7 +87,9 @@ func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	port, err := findListeningPortForPID(job.PID)
 	if err != nil {
-		return errors.Wrap(err, "could not resolve port for PID")
+		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, err))
+		port = "8080"
+		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
 
 	profileType := "profile"
