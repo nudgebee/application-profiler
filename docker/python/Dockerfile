@@ -17,6 +17,7 @@ COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 COPY --from=pyspybuild /usr/local/bin/py-spy /app/py-spy
 COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/get-ps-command.sh /app/get-ps-command.sh
+RUN pip3 install austin-dist==3.7.0
 RUN chmod +x /app/get-ps-command.sh
 
 CMD [ "/app/agent" ]
