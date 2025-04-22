@@ -1,22 +1,24 @@
-package adapter
+package api
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/alitto/pond"
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/josepdcs/kubectl-prof/internal/cli/kubernetes"
@@ -30,30 +32,30 @@ type EventHandler interface {
 	Handle(events chan string, done chan bool, resultFile chan result.File)
 }
 
-// ProfilingContainerAdapter defines all methods related to the profiling container
+// ProfilingContainerApi defines all methods related to the profiling container
 // A profiling container will be used for both a profiling job (and pod) and for ephemeral container
-type ProfilingContainerAdapter interface {
+type ProfilingContainerApi interface {
 	// HandleProfilingContainerLogs handles the logs of the profiling container up to obtain the result file if no error found
 	HandleProfilingContainerLogs(pod *v1.Pod, containerName string, handler EventHandler, ctx context.Context) (chan bool, chan result.File, error)
 	// GetRemoteFile returns the remote file from the pod's container
-	GetRemoteFile(pod *v1.Pod, containerName string, remoteFile result.File, target *config.TargetConfig) (string, error)
+	GetRemoteFile(pod *v1.Pod, containerName string, remoteFile result.File, targetPodName string, target *config.TargetConfig) (string, error)
 }
 
-// profilingContainerAdapter implements ProfilingContainerAdapter and wraps kubernetes.ConnectionInfo
-type profilingContainerAdapter struct {
+// profilingContainerApi implements ProfilingContainerApi and wraps kubernetes.ConnectionInfo
+type profilingContainerApi struct {
 	connectionInfo kubernetes.ConnectionInfo
 	executor       podexec.Executor
 }
 
-// NewProfilingContainerAdapter returns new instance of ProfilingContainerAdapter
-func NewProfilingContainerAdapter(connectionInfo kubernetes.ConnectionInfo) ProfilingContainerAdapter {
-	return profilingContainerAdapter{
+// NewProfilingContainerApi returns new instance of ProfilingContainerApi
+func NewProfilingContainerApi(connectionInfo kubernetes.ConnectionInfo) ProfilingContainerApi {
+	return &profilingContainerApi{
 		connectionInfo: connectionInfo,
 		executor:       podexec.NewExec(connectionInfo.RestConfig, connectionInfo.ClientSet),
 	}
 }
 
-func (p profilingContainerAdapter) HandleProfilingContainerLogs(pod *v1.Pod, containerName string, handler EventHandler, ctx context.Context) (chan bool, chan result.File, error) {
+func (p *profilingContainerApi) HandleProfilingContainerLogs(pod *v1.Pod, containerName string, handler EventHandler, ctx context.Context) (chan bool, chan result.File, error) {
 	if stringUtils.IsBlank(containerName) {
 		return nil, nil, errors.New("container name is mandatory for handling its logs")
 	}
@@ -95,7 +97,7 @@ func (p profilingContainerAdapter) HandleProfilingContainerLogs(pod *v1.Pod, con
 	return done, resultFile, nil
 }
 
-func (p profilingContainerAdapter) GetRemoteFile(pod *v1.Pod, containerName string, remoteFile result.File, target *config.TargetConfig) (string, error) {
+func (p *profilingContainerApi) GetRemoteFile(pod *v1.Pod, containerName string, remoteFile result.File, targetPodName string, target *config.TargetConfig) (string, error) {
 	var fileBuff []byte
 
 	if remoteFile.Chunks != nil && len(remoteFile.Chunks) > 0 {
@@ -116,21 +118,20 @@ func (p profilingContainerAdapter) GetRemoteFile(pod *v1.Pod, containerName stri
 		}
 	}
 
+	fileName := filepath.Join(target.LocalPath, renameResultFileName(targetPodName, remoteFile.FileName, remoteFile.Timestamp))
+	decompressedFile, err := os.Create(fileName)
+	if err != nil {
+		return "", errors.Wrap(err, "could not create result file")
+	}
+
 	comp, err := compressor.Get(target.Compressor)
 	if err != nil {
 		return "", errors.Wrap(err, "could not get compressor")
 	}
 
-	decoded, err := comp.Decode(fileBuff)
+	err = comp.Decode(decompressedFile, bytes.NewReader(fileBuff))
 	if err != nil {
-		return "", errors.Wrap(err, "could not decode remote file")
-	}
-
-	fileName := filepath.Join(target.LocalPath, renameResultFileName(remoteFile.FileName, remoteFile.Timestamp))
-
-	err = os.WriteFile(fileName, decoded, 0644)
-	if err != nil {
-		return "", errors.Wrap(err, "could not write result file")
+		return "", errors.Wrap(err, "could not decompress remote file")
 	}
 
 	return fileName, nil
@@ -274,9 +275,9 @@ func readChunks(downloadChunks []string, fileBuffSize int64) ([]byte, error) {
 }
 
 // renameResultFileName renames the result file
-func renameResultFileName(fileName string, t time.Time) string {
+func renameResultFileName(podName, fileName string, t time.Time) string {
 	f := stringUtils.SubstringBeforeLast(stringUtils.SubstringAfterLast(fileName, "/"), ".")
-	return stringUtils.SubstringBefore(f, ".") + "-" + strings.ReplaceAll(t.Format(time.RFC3339), ":", "_") + "." + stringUtils.SubstringAfter(f, ".")
+	return podName + "-" + stringUtils.SubstringBefore(f, ".") + "-" + strings.ReplaceAll(t.Format(time.RFC3339), ":", "_") + "." + stringUtils.SubstringAfter(f, ".")
 }
 
 // renameChunkFileName renames the chunk file

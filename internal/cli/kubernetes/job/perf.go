@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/josepdcs/kubectl-prof/internal/cli/kubernetes"
 	"github.com/josepdcs/kubectl-prof/internal/cli/version"
@@ -14,6 +15,8 @@ import (
 
 type perfCreator struct{}
 
+var perfDefaultCapabilities = []apiv1.Capability{"SYS_ADMIN"}
+
 func (p *perfCreator) Create(targetPod *apiv1.Pod, cfg *config.ProfilerConfig) (string, *batchv1.Job, error) {
 	id := string(uuid.NewUUID())
 	imageName := p.getImageName(cfg.Target)
@@ -22,6 +25,11 @@ func (p *perfCreator) Create(targetPod *apiv1.Pod, cfg *config.ProfilerConfig) (
 
 	if cfg.Target.ImagePullSecret != "" {
 		imagePullSecret = []apiv1.LocalObjectReference{{Name: cfg.Target.ImagePullSecret}}
+	}
+
+	capabilities := cfg.Job.Capabilities
+	if len(capabilities) == 0 {
+		capabilities = perfDefaultCapabilities
 	}
 
 	commonMeta := p.getObjectMeta(id, cfg)
@@ -74,7 +82,7 @@ func (p *perfCreator) Create(targetPod *apiv1.Pod, cfg *config.ProfilerConfig) (
 							SecurityContext: &apiv1.SecurityContext{
 								Privileged: &cfg.Job.Privileged,
 								Capabilities: &apiv1.Capabilities{
-									Add: []apiv1.Capability{"SYS_ADMIN"},
+									Add: capabilities,
 								},
 							},
 							Resources: resources,

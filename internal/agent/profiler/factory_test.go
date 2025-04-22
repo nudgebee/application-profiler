@@ -1,12 +1,13 @@
 package profiler
 
 import (
+	"testing"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/jvm"
 	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
 	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGet(t *testing.T) {
@@ -47,6 +48,11 @@ func TestGet(t *testing.T) {
 			name: "should return perf profiler",
 			tool: api.Perf,
 			want: NewPerfProfiler(executil.NewCommander(), publish.NewPublisher()),
+		},
+		{
+			name: "should return node dummy profiler",
+			tool: api.NodeDummy,
+			want: NewNodeDummyProfiler(publish.NewPublisher()),
 		},
 		{
 			name: "should return mock profiler",

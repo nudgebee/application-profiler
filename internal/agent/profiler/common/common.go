@@ -2,10 +2,11 @@ package common
 
 import (
 	"fmt"
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/config"
 	"os"
 	"path/filepath"
+
+	"github.com/josepdcs/kubectl-prof/api"
+	"github.com/josepdcs/kubectl-prof/internal/agent/config"
 )
 
 const (
@@ -65,6 +66,16 @@ func GetFileExtension(tool api.ProfilingTool, outputType api.OutputType) string 
 			// api.FlameGraph
 			return ".svg"
 		}
+	case api.NodeDummy:
+		switch outputType {
+		case api.HeapSnapshot:
+			return ".heapsnapshot"
+		default:
+			// api.FlameGraph
+			return ".svg"
+		}
+	case api.PProf:
+		return ".pprof"
 	default:
 		// api.FlameGraph
 		return ".svg"

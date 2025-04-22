@@ -3,6 +3,12 @@ package profiler
 import (
 	"bytes"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/agent/config"
 	"github.com/josepdcs/kubectl-prof/internal/agent/job"
@@ -15,11 +21,6 @@ import (
 	"github.com/josepdcs/kubectl-prof/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestBpfProfiler_SetUp(t *testing.T) {
@@ -475,7 +476,6 @@ func Test_bpfManager_handleFlamegraph(t *testing.T) {
 				_ = os.WriteFile(filepath.Join(common.TmpDir(), config.ProfilingPrefix+"raw.txt"), b.Bytes(), 0644)
 
 				commander := executil.NewFakeCommander()
-				// mock commander.Command return exec.Command("ls", common.TmpDir())
 				commander.On("Command").Return(exec.Command("ls", common.TmpDir()))
 				publisher := publish.NewFakePublisher()
 

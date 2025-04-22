@@ -1,6 +1,9 @@
 package kubernetes
 
 import (
+	"testing"
+	"time"
+
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
@@ -8,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
-	"time"
 )
 
 func TestToContainerId(t *testing.T) {
@@ -201,9 +202,8 @@ func TestGetArgs(t *testing.T) {
 							HeapDumpSplitInChunkSize: "10M",
 						},
 					},
-					Job:                nil,
-					LogLevel:           "",
-					EphemeralContainer: &config.EphemeralContainerConfig{Privileged: true},
+					Job:      nil,
+					LogLevel: "",
 				},
 				id: "ID",
 			},
@@ -223,6 +223,71 @@ func TestGetArgs(t *testing.T) {
 				"--interval", "10s",
 				"--print-logs",
 				"--heap-dump-split-in-chunk-size", "10M",
+			},
+		},
+		{
+			name: "With node heap snapshot signal",
+			args: args{
+				targetPod: &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						UID:  "UID",
+						Name: "PodName",
+					},
+					Spec: v1.PodSpec{
+						NodeName: "NodeName",
+					},
+				},
+				cfg: &config.ProfilerConfig{
+					Target: &config.TargetConfig{
+						Namespace:            "",
+						PodName:              "",
+						ContainerName:        "",
+						ContainerID:          "ContainerID",
+						Event:                api.Cpu,
+						Duration:             60 * time.Second,
+						Interval:             10 * time.Second,
+						Id:                   "",
+						LocalPath:            "LocalPath",
+						DryRun:               false,
+						Image:                "",
+						ContainerRuntime:     api.Crio,
+						ContainerRuntimePath: "/var/lib/containers/storage",
+						Language:             api.Node,
+						Compressor:           compressor.Gzip,
+						ImagePullSecret:      "",
+						ServiceAccountName:   "",
+						ProfilingTool:        api.Bpf,
+						OutputType:           api.HeapSnapshot,
+
+						ExtraTargetOptions: config.ExtraTargetOptions{
+							PrintLogs:                true,
+							GracePeriodEnding:        5 * time.Minute,
+							NodeHeapSnapshotSignal:   12,
+							HeapDumpSplitInChunkSize: "10M",
+						},
+					},
+					Job:      nil,
+					LogLevel: "",
+				},
+				id: "ID",
+			},
+			want: []string{
+				"--target-container-runtime", "crio",
+				"--target-container-runtime-path", "/var/lib/containers/storage",
+				"--target-pod-uid", "UID",
+				"--target-container-id", "ContainerID",
+				"--lang", "node",
+				"--event-type", "cpu",
+				"--compressor-type", "gzip",
+				"--profiling-tool", "bpf",
+				"--output-type", "heapsnapshot",
+				"--grace-period-ending", "5m0s",
+				"--job-id", "ID",
+				"--duration", "1m0s",
+				"--interval", "10s",
+				"--print-logs",
+				"--heap-dump-split-in-chunk-size", "10M",
+				"--node-heap-snapshot-signal", "12",
 			},
 		},
 	}

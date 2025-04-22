@@ -36,7 +36,7 @@ fixes.
 
 ### Profiling Java Pod
 
-In order to profile a Java application in pod `mypod` for 1 minute and save the flamegraph into `/tmp` run:
+To profile a Java application in pod `mypod` for 1 minute and save the flamegraph into `/tmp` run:
 
 ```shell
 kubectl prof my-pod -t 5m -l java -o flamegraph --local-path=/tmp
@@ -44,11 +44,11 @@ kubectl prof my-pod -t 5m -l java -o flamegraph --local-path=/tmp
 
 *NOTICE*:
 
-* if `--local-path` is omitted, flamegraph result will be saved into current directory
+* if `--local-path` is omitted, a flamegraph result will be saved into current directory
 
 ### Profiling Alpine based container
 
-Profiling Java application in alpine based containers require using `--alpine` flag:
+Profiling Java application in alpine-based containers require using `--alpine` flag:
 
 ```shell
 kubectl prof mypod -t 1m --lang java -o flamegraph --alpine 
@@ -108,7 +108,7 @@ kubectl prof mypod -t 1m --lang java --runtime crio
 
 ### Profiling Python Pod
 
-In order to profile a Python application in pod `mypod` for 1 minute and save the flamegraph into `/tmp` run:
+To profile a Python application in pod `mypod` for 1 minute and save the flamegraph into `/tmp` run:
 
 ```shell
 kubectl prof mypod -t 1m --lang python -o flamegraph --local-path=/tmp
@@ -119,7 +119,7 @@ kubectl prof mypod -t 1m --lang python -o flamegraph --local-path=/tmp
 In this case, profiling Python Pod and generate the thread dump output require using `-o/--output threaddump` option:
 
 ```shell
-kubectl prof mypod -t 1m --lang python --local-path=/tmp -o threaddump 
+kubectl prof mypod --lang python --local-path=/tmp -o threaddump 
 ```
 
 ### Profiling Python Pod and generate speed scope output format file
@@ -132,23 +132,41 @@ kubectl prof mypod -t 1m --lang python --local-path=/tmp -o speedscope
 
 ### Profiling Golang Pod
 
-In order to profile a Golang application in pod `mypod` for 1 minute run:
+To profile a Golang application in pod `mypod` for 1 minute run:
 
 ```shell
 kubectl prof mypod -t 1m --lang go -o flamegraph
 ```
 
-### Profiling Node Pod
+### Profiling NodeJs Pod
 
-In order to profile a Python application in pod `mypod` for 1 minute run:
+To profile a NodeJS application in pod `mypod` for 1 minute run:
 
 ```shell
 kubectl prof mypod -t 1m --lang node -o flamegraph
 ```
 
+### Profiling NodeJs Pod and generate heap snapshot output
+
+For profiling NodeJS Pod and generate the heap snapshot output require using `-o/--output heapsnapshot` option:
+
+```shell
+kubectl prof mypod --lang node -o heapsnapshot
+```
+*NOTICE*: the NodeJS apps have to be run with `--heapsnapshot-signal=SIGUSR2` (default) or `--heapsnapshot-signal=SIGUSR1` options.
+
+If the NodeJS app was run with `--heapsnapshot-signal=SIGUSR1` option, you should use the following command:
+
+```shell
+kubectl prof mypod --lang node -o heapsnapshot --node-heap-snapshot-signal=10
+```
+Take into account that the signal has to be a number, not a string.
+
+More info about that [here](https://nodejs.org/api/cli.html#--heapsnapshot-signalsignal) and [here](https://nodejs.org/en/learn/diagnostics/memory/using-heap-snapshot#using-heap-snapshot).
+
 ### Profiling Ruby Pod
 
-In order to profile a Ruby application in pod `mypod` for 1 minute run:
+To profile a Ruby application in pod `mypod` for 1 minute run:
 
 ```shell
 kubectl prof mypod -t 1m --lang ruby -o flamegraph
@@ -156,7 +174,7 @@ kubectl prof mypod -t 1m --lang ruby -o flamegraph
 
 ### Profiling Clang Pod
 
-In order to profile a Clang application in pod `mypod` for 1 minute run:
+To profile a Clang application in pod `mypod` for 1 minute run:
 
 ```shell
 kubectl prof mypod -t 1m --lang clang -o flamegraph
@@ -164,7 +182,7 @@ kubectl prof mypod -t 1m --lang clang -o flamegraph
 
 ### Profiling Clang++ Pod
 
-In order to profile a Clang++ application in pod `mypod` for 1 minute run:
+To profile a Clang++ application in pod `mypod` for 1 minute run:
 
 ```shell
 kubectl prof mypod -t 1m --lang clang++ -o flamegraph
@@ -178,17 +196,35 @@ kubectl prof mypod -t 1m --lang clang++ -o flamegraph
 kubectl prof mypod -l java -o flamegraph -t 5m --interval 60s --cpu-limits=1 -r containerd --image=localhost/my-agent-image-jvm:latest --image-pull-policy=IfNotPresent
 ```
 
-### Profiling in contprof namespace a pod running in contprof-apps namespace by using the profiler service account for go language
+#### Profiling in profiling namespace a pod running in my-apps namespace by using the profiler service account for go language
 
 ```shell
-kubectl prof mypod -n contprof --service-account=profiler --target-namespace=contprof-stupid-apps -l go
+kubectl prof mypod -n profiling --service-account=profiler --target-namespace=my-apps -l go
 ```
 
-### Profiling by setting custom resource requests and limits for the agent pod (default: neither requests nor limits are set) for python language
+#### Profiling by setting custom resource requests and limits for the agent pod (default: neither requests nor limits are set) for python language
 
 ```shell
 kubectl prof mypod --cpu-requests 100m --cpu-limits 200m --mem-requests 100Mi --mem-limits 200Mi -l python
 ```
+
+### Profiling a bunch of pods by using a label selector
+
+Profile the pods with the label selector "app=my-app"
+for 5 minutes with JFR format for java language by using `--selector` option:
+
+```shell:
+kubectl prof --selector app=myapp -t 5m -l java -o jfr
+```
+ ⚠️ ***ATTENTION:*** use this option with caution, it will profile all the pods that match the label selector.
+
+In addition, you can define the number of pods to be profiled simultaneously by using `--pool-size-profiling-jobs`. 
+For example, the following command will profile five pods simultaneously:
+
+```shell:
+kubectl prof --selector app=myapp -t 5m -l java -o jfr --pool-size-profiling-jobs 5
+```
+
 
 ### For more detailed options run:
 
@@ -212,14 +248,14 @@ kubectl prof --help
 
 ### Pre-built binaries
 
-See the [release](https://github.com/josepdcs/kubectl-prof/releases/tag/1.2.3) page for the full list of pre-built
+See the [release](https://github.com/josepdcs/kubectl-prof/releases/tag/1.5.0) page for the full list of pre-built
 assets. And download the binary according yours architecture.
 
 ### Installing for Linux x86_64
 
 ```shell
-curl -sL https://github.com/josepdcs/kubectl-prof/releases/download/1.2.3/kubectl-prof_1.2.3_linux_x86_64.tar.gz
-tar xvfz kubectl-prof_1.2.3_linux_x86_64.tar.gz && sudo install kubectl-prof /usr/local/bin/
+wget https://github.com/josepdcs/kubectl-prof/releases/download/1.5.0/kubectl-prof_1.5.0_linux_amd64.tar.gz
+tar xvfz kubectl-prof_1.5.0_linux_amd64.tar.gz && sudo install kubectl-prof /usr/local/bin/
 ```
 
 ## Building
@@ -285,10 +321,11 @@ following tools according the programming language:
 * For Node.js: [ebpf profiling](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter) and [perf](https://perf.wiki.kernel.org/index.php/Main_Page) but last one is not recommended.
   * For generating flame graphs use the option: `-o flamegraph`.
   * For generating raw use the option: `-o raw`.
+  * For generating heap snapshot use the option: `-o heapsnapshot`.
   * Note: Default output is flame graphs if no option `-o/--output` is given.
-  * In order for Javascript Symbols to be resolved, node process needs to be run with `--prof-basic-prof` flag.
-* For Clang and Clang++: [perf](https://perf.wiki.kernel.org/index.php/Main_Page) is the default profiler
-  but [ebpf profiling](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter) is also supported.
+  * In order for Javascript Symbols to be resolved, the node process needs to be run with `--perf-basic-prof` flag.
+  * For generating the heap snapshot output, the node process needs to be run with `--heapsnapshot-signal` flag. Information about that [here](https://nodejs.org/api/cli.html#--heapsnapshot-signalsignal) and [here](https://nodejs.org/en/learn/diagnostics/memory/using-heap-snapshot#using-heap-snapshot).
+* For Clang and Clang++: [perf](https://perf.wiki.kernel.org/index.php/Main_Page) is the default profiler, but [ebpf profiling](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter) is also supported.
 
 The raw output is a text file with the raw data from the profiler. It could be used to generate flame graphs, or you can use https://www.speedscope.app/ to visualize the data.
 
@@ -310,6 +347,21 @@ It will try to profile them all based on the provided language. When this happen
 But if you want to profile a specific process, you have two options:
 * Provide the specific PID using the `--pid PID` flag if you know the PID (the previous warning can help you identify the PID you want to profile). 
 * Provide a process name using the `--pgrep process-matching-name` flag.
+
+## Capabilities
+For profiling Java Pods, `kubectl-prof` runs the agent pod with the `PERFMON` and `SYSLOG` capabilities by default.
+
+According to the [Kernel documentation](https://www.kernel.org/doc/html/latest/admin-guide/perf-security.html#perf-events-access-control),
+`PERFMON` and `SYSLOG` should be enough for collecting performance samples.
+
+However, if you need to run with `SYS_ADMIN`, you can specify it using the `--capabilities` option. 
+This one can be used multiple times to add more than one capability.
+
+**Example**:
+
+```shell
+kubectl prof my-pod -t 5m -l java -o flamegraph --local-path=/tmp --capabilities=SYS_ADMIN
+```
 
 ## Contribute
 
