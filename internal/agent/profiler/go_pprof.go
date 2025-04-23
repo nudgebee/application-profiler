@@ -121,6 +121,14 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		return errors.Wrapf(err, "failed to nsenter+wget %q", targetURL)
 	}
 
+	if job.OutputType == api.FlameGraph {
+		svgFile := rawFile + ".svg"
+		if err := m.generateFlamegraph(rawFile, svgFile); err != nil {
+			return err
+		}
+		return m.publisher.Do(job.Compressor, svgFile, job.OutputType)
+	}
+
 	// Finally, publish the file as before
 	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
 }
@@ -162,5 +170,19 @@ func findListeningPortForPID(pid string) (string, error) {
 // CleanUp removes temporary profiling files.
 func (p *GoPprofProfiler) CleanUp(*job.ProfilingJob) error {
 	file.RemoveAll(common.TmpDir(), config.ProfilingPrefix)
+	return nil
+}
+
+func (m *goPprofManager) generateFlamegraph(rawFile, svgFile string) error {
+
+	cmd := exec.Command(
+		"pprof",
+		"-svg",
+		"-output", svgFile,
+		rawFile,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return errors.Wrapf(err, "failed to generate flamegraph: %s", string(out))
+	}
 	return nil
 }

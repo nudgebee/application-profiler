@@ -46,7 +46,7 @@ var GetProfilingTool = func(l ProgrammingLanguage, o OutputType) ProfilingTool {
 		return Pyspy
 	case Go:
 		switch o {
-		case Pprof:
+		case Pprof, HeapDump, FlameGraph:
 			return PProf
 		default:
 			return Bpf
