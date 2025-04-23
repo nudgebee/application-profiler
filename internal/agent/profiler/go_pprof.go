@@ -121,16 +121,11 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		return errors.Wrapf(err, "failed to nsenter+wget %q", targetURL)
 	}
 
-	if job.OutputType == api.FlameGraph {
-		svgFile := rawFile + ".svg"
-		if err := m.generateFlamegraph(rawFile, svgFile); err != nil {
-			return err
-		}
-		return m.publisher.Do(job.Compressor, svgFile, job.OutputType)
+	svgFile := rawFile + ".svg"
+	if err := m.generateFlamegraph(rawFile, svgFile); err != nil {
+		return err
 	}
-
-	// Finally, publish the file as before
-	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
+	return m.publisher.Do(job.Compressor, svgFile, job.OutputType)
 }
 
 func findListeningPortForPID(pid string) (string, error) {
