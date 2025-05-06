@@ -121,14 +121,14 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 
 	// result file name is composed by the job info and the pid
 	resultFileName := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, pid, job.Iteration)
-	if job.OutputType == api.ThreadDump {
-		file.Write(resultFileName, out.String())
-	} else {
+	if job.OutputType == api.FlameGraph {
 		err = p.handleFlamegraph(job, flamegraph.Get(job), fileName, resultFileName)
 		if err != nil {
 			log.ErrorLogLn(fmt.Sprintf("could not generate flamegraph (PID: %s): %s", pid, err.Error()))
 			return nil, time.Since(start)
 		}
+	} else {
+		file.Write(resultFileName, out.String())
 	}
 
 	return p.publisher.Do(job.Compressor, resultFileName, job.OutputType), time.Since(start)
