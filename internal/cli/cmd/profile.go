@@ -2,20 +2,21 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/josepdcs/kubectl-prof/internal/cli"
-	"github.com/josepdcs/kubectl-prof/internal/cli/adapter"
 	"github.com/josepdcs/kubectl-prof/internal/cli/config"
 	"github.com/josepdcs/kubectl-prof/internal/cli/kubernetes"
 	"github.com/josepdcs/kubectl-prof/internal/cli/profiler"
+	apiprof "github.com/josepdcs/kubectl-prof/internal/cli/profiler/api"
 	"github.com/josepdcs/kubectl-prof/internal/cli/version"
 	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
-	"os"
-	"time"
 
 	"github.com/josepdcs/kubectl-prof/api"
 	"github.com/spf13/cobra"
@@ -23,17 +24,18 @@ import (
 )
 
 const (
-	defaultGracePeriodEnding      = 5 * time.Minute
-	defaultContainerRuntime       = string(api.Containerd)
-	defaultEvent                  = string(api.Itimer)
-	defaultLogLevel               = string(api.InfoLevel)
-	defaultCompressor             = string(compressor.Gzip)
-	defaultOutputType             = string(api.FlameGraph)
-	defaultImagePullPolicy        = string(apiv1.PullIfNotPresent)
-	defaultHeapDumpSplitSize      = "50M"
-	defaultPoolSizeRetrieveChunks = 5
-	defaultRetrieveFileRetries    = 3
-	longDescription               = `Profiling on existing applications with low-overhead.
+	defaultGracePeriodEnding           = 5 * time.Minute
+	defaultContainerRuntime            = string(api.Containerd)
+	defaultEvent                       = string(api.Itimer)
+	defaultLogLevel                    = string(api.InfoLevel)
+	defaultCompressor                  = string(compressor.Gzip)
+	defaultOutputType                  = string(api.FlameGraph)
+	defaultImagePullPolicy             = string(apiv1.PullIfNotPresent)
+	defaultPoolSizeLaunchProfilingJobs = 0
+	defaultHeapDumpSplitSize           = "50M"
+	defaultPoolSizeRetrieveChunks      = 5
+	defaultRetrieveFileRetries         = 3
+	longDescription                    = `Profiling on existing applications with low-overhead.
 
 These commands help you identify application performance issues.
 `
@@ -42,16 +44,19 @@ These commands help you identify application performance issues.
 	%[1]s prof my-pod -t 5m -l java -o jfr
 
 	# Profile an alpine based container for java language
-	%[1]s prof mypod -l java --alpine 
+	%[1]s prof my-pod -l java --alpine 
 
 	# Profile a pod for 5 minutes in intervals of 60 seconds for java language by giving the cpu limits, the container runtime, the agent image and the image pull policy
 	%[1]s my-pod -l java -o flamegraph -t 5m --interval 60s --cpu-limits=1 -r containerd --image=localhost/my-agent-image-jvm:latest --image-pull-policy=IfNotPresent
 
 	# Profile in contprof namespace a pod running in contprof-stupid-apps namespace by using the profiler service account for go language 
-	%[1]s prof mypod -n contprof --service-account=profiler --target-namespace=contprof-stupid-apps -l go
+	%[1]s prof my-pod -n contprof --service-account=profiler --target-namespace=contprof-stupid-apps -l go
 
 	# Set custom resource requests and limits for the agent pod (default: neither requests nor limits are set) for python language
-	%[1]s prof mypod --cpu-requests 100m --cpu-limits 200m --mem-requests 100Mi --mem-limits 200Mi -l python
+	%[1]s prof my-pod --cpu-requests 100m --cpu-limits 200m --mem-requests 100Mi --mem-limits 200Mi -l python
+
+	# Profile the pods with the label selector "app=my-app" for 5 minutes with JFR format for java language
+	%[1]s prof -l java -o jfr -t 5m --selector app=my-app
 `
 )
 
@@ -64,10 +69,10 @@ type Profiler interface {
 
 type ProfileOptions struct {
 	configFlags *genericclioptions.ConfigFlags
-	genericclioptions.IOStreams
+	genericiooptions.IOStreams
 }
 
-func NewProfileOptions(streams genericclioptions.IOStreams) *ProfileOptions {
+func NewProfileOptions(streams genericiooptions.IOStreams) *ProfileOptions {
 	return &ProfileOptions{
 		configFlags: genericclioptions.NewConfigFlags(false),
 		IOStreams:   streams,
@@ -75,31 +80,30 @@ func NewProfileOptions(streams genericclioptions.IOStreams) *ProfileOptions {
 }
 
 type profilingFlags struct {
-	runtime               string
-	runtimePath           string
-	lang                  string
-	event                 string
-	logLevel              string
-	compressorType        string
-	profilingTool         string
-	outputType            string
-	imagePullPolicy       string
-	privileged            bool
-	useEphemeralContainer bool
+	runtime         string
+	runtimePath     string
+	lang            string
+	event           string
+	logLevel        string
+	compressorType  string
+	profilingTool   string
+	outputType      string
+	imagePullPolicy string
+	privileged      bool
+	capabilities    []string
 }
 
 func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 	var (
-		target             config.TargetConfig
-		job                config.JobConfig
-		ephemeralContainer config.EphemeralContainerConfig
-		showVersion        bool
-		flags              profilingFlags
+		target      config.TargetConfig
+		job         config.JobConfig
+		showVersion bool
+		flags       profilingFlags
 	)
 
 	options := NewProfileOptions(streams)
 	cmd := &cobra.Command{
-		Use:                   "prof [pod-name]",
+		Use:                   "prof [pod-name | --selector label]",
 		DisableFlagsInUseLine: true,
 		Short:                 "Profile running applications. Several output types are supported: flamegraphs, jfrs, threadumps, heapdumps, etc.",
 		Long:                  longDescription,
@@ -114,7 +118,7 @@ func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 				return
 			}
 
-			if len(args) == 0 {
+			if len(args) == 0 && target.LabelSelector == "" {
 				_ = cmd.Help()
 				return
 			}
@@ -128,13 +132,15 @@ func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 			level, _ := log.ParseLevel(flags.logLevel)
 			log.SetLevel(level)
 
-			target.PodName = args[0]
-			if len(args) > 1 {
-				target.ContainerName = args[1]
+			if target.LabelSelector == "" {
+				target.PodName = args[0]
+				if len(args) > 1 {
+					target.ContainerName = args[1]
+				}
 			}
 
 			// Prepare profiler
-			cfg, err := getProfilerConfig(target, job, ephemeralContainer, flags.useEphemeralContainer, flags.logLevel, flags.privileged)
+			cfg, err := getProfilerConfig(target, job, flags.logLevel, flags.privileged, flags.capabilities)
 			if err != nil {
 				log.Fatalf("Failed configure profiler: %v\n", err)
 			}
@@ -148,31 +154,26 @@ func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 				cfg.Target.Namespace = connectionInfo.Namespace
 			}
 
-			if flags.useEphemeralContainer {
-				err = profiler.NewEphemeralProfiler(
-					adapter.NewPodAdapter(connectionInfo),
-					adapter.NewProfilingEphemeralContainerAdapter(connectionInfo),
-					adapter.NewProfilingContainerAdapter(connectionInfo),
-				).Profile(cfg)
-			} else {
-				cfg.Job.Namespace = connectionInfo.Namespace
-				err = profiler.NewJobProfiler(
-					adapter.NewPodAdapter(connectionInfo),
-					adapter.NewProfilingJobAdapter(connectionInfo),
-					adapter.NewProfilingContainerAdapter(connectionInfo),
-				).Profile(cfg)
-			}
+			cfg.Job.Namespace = connectionInfo.Namespace
+			err = profiler.NewJobProfiler(
+				apiprof.NewPodApi(connectionInfo),
+				apiprof.NewProfilingJobApi(connectionInfo),
+				apiprof.NewProfilingContainerApi(connectionInfo),
+			).Profile(cfg)
 
 			if err != nil {
 				printer := cli.NewPrinter(cfg.Target.DryRun)
+				printer.Print("Profiling failed ... ")
 				printer.PrintError()
-				log.Fatalf(err.Error())
+				printer.Print("😥 " + err.Error())
 			}
 		},
 	}
 
 	cmd.Flags().BoolVar(&showVersion, "version", false, "Print version info")
 
+	cmd.Flags().StringVar(&target.LabelSelector, "selector", "", "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2). Matching objects must satisfy all of the specified label constraints.")
+	cmd.Flags().IntVar(&target.PoolSizeLaunchProfilingJobs, "pool-size-profiling-jobs", defaultPoolSizeLaunchProfilingJobs, "The pool size of goroutines for launching profiling jobs when the '--selector' flag is used (default \"No limit: all matching pods will be profiled simultaneously\")")
 	cmd.Flags().StringVarP(&flags.runtime, "runtime", "r", defaultContainerRuntime,
 		fmt.Sprintf("The container runtime used for kubernetes, choose one of %v", api.AvailableContainerRuntimes()))
 	cmd.Flags().StringVar(&flags.runtimePath, "runtime-path", api.GetContainerRuntimeRootPath[api.ContainerRuntime(defaultContainerRuntime)],
@@ -211,26 +212,25 @@ func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 	cmd.Flags().DurationVar(&target.GracePeriodEnding, "grace-period-ending", defaultGracePeriodEnding, "The grace period to spend before to end the agent")
 	cmd.Flags().StringVar(&flags.imagePullPolicy, "image-pull-policy", defaultImagePullPolicy, fmt.Sprintf("Image pull policy, choose one of %v", imagePullPolicies))
 	cmd.Flags().StringVar(&target.ContainerName, "target-container-name", "", "The target container name to be profiled")
-	cmd.Flags().StringVar(&target.HeapDumpSplitInChunkSize, "heap-dump-split-size", defaultHeapDumpSplitSize, "The heap dump will be split into chunks of given size following the split command valid format.")
-	cmd.Flags().IntVar(&target.PoolSizeRetrieveChunks, "pool-size-retrieve-chunks", defaultPoolSizeRetrieveChunks, "The pool size of go routines to retrieve chunks of the obtained heap dump from the agent.")
-	cmd.Flags().IntVar(&target.RetrieveFileRetries, "retrieve-file-retries", defaultRetrieveFileRetries, "The number of retries to retrieve a file from the remote container.")
+	cmd.Flags().StringVar(&target.HeapDumpSplitInChunkSize, "heap-dump-split-size", defaultHeapDumpSplitSize, "The heap dump (or snapshot, for Node.js) will be split into chunks of a specified size, following the valid format for the split command (e.g. 50M, 1G, etc.)")
+	cmd.Flags().IntVar(&target.PoolSizeRetrieveChunks, "pool-size-retrieve-chunks", defaultPoolSizeRetrieveChunks, "The pool size of goroutines used to retrieve chunks of the obtained heap dump (or snapshot, for Node.js) from the agent")
+	cmd.Flags().IntVar(&target.RetrieveFileRetries, "retrieve-file-retries", defaultRetrieveFileRetries, "The number of retries to retrieve a file from the remote container")
 	cmd.Flags().StringVar(&target.PID, "pid", "", "The PID of target process if it is known")
 	cmd.Flags().StringVarP(&target.Pgrep, "pgrep", "p", "", "Name of the target process")
-	//cmd.Flags().BoolVar(&flags.useEphemeralContainer, "use-ephemeral-container", false, "Launching profiling agent into ephemeral container instead into Job (experimental)")
+	cmd.Flags().IntVar(&target.NodeHeapSnapshotSignal, "node-heap-snapshot-signal", 12, "The signal to be sent to the target process to generate a heap snapshot for Node.js applications")
+	cmd.Flags().StringSliceVar(&flags.capabilities, "capabilities", nil, "The capabilities to be added to the agent container. It can be used multiple times to add more than one capability (e.g. --capabilities SYS_ADMIN --capabilities SYS_PTRACE)")
 
 	options.configFlags.AddFlags(cmd.Flags())
 
 	return cmd
 }
 
-func getProfilerConfig(target config.TargetConfig, job config.JobConfig, ephemeralContainer config.EphemeralContainerConfig,
-	useEphemeralContainer bool, logLevel string, privileged bool) (*config.ProfilerConfig, error) {
-	if useEphemeralContainer {
-		ephemeralContainer = config.EphemeralContainerConfig{Privileged: privileged}
-		return config.NewProfilerConfig(&target, config.WithEphemeralContainer(&ephemeralContainer), config.WithLogLevel(api.LogLevel(logLevel)))
-	}
-
+func getProfilerConfig(target config.TargetConfig, job config.JobConfig, logLevel string, privileged bool, capabilities []string) (*config.ProfilerConfig, error) {
 	job.Privileged = privileged
+	job.Capabilities = make([]apiv1.Capability, len(capabilities))
+	for i, capability := range capabilities {
+		job.Capabilities[i] = apiv1.Capability(capability)
+	}
 	return config.NewProfilerConfig(&target, config.WithJob(&job), config.WithLogLevel(api.LogLevel(logLevel)))
 }
 
@@ -331,19 +331,19 @@ func validateLang(lang string) error {
 func validateProfilingTool(profilingTool string, outputType string, target *config.TargetConfig) {
 	if stringUtils.IsBlank(profilingTool) {
 		target.ProfilingTool = api.GetProfilingTool(target.Language, api.OutputType(outputType))
-		fmt.Printf("Default profiling tool %s will be used ... ✔\n", target.ProfilingTool)
+		fmt.Printf("Default profiling tool %s will be used ... 🧐\n", target.ProfilingTool)
 		return
 	}
 
 	defaultTool := api.GetProfilingToolsByProgrammingLanguage[target.Language][0]
 	if !api.IsSupportedProfilingTool(profilingTool) {
-		fmt.Printf("Unsupported profiling tool %s, default %s will be used ... ✔\n", profilingTool, defaultTool)
+		fmt.Printf("Unsupported profiling tool %s, default %s will be used ... 🧐\n", profilingTool, defaultTool)
 		target.ProfilingTool = defaultTool
 		return
 	}
 
 	if !api.IsValidProfilingTool(api.ProfilingTool(profilingTool), target.Language) {
-		fmt.Printf("Unsupported profiling tool %s for language %s, default %s will be used ... ✔\n",
+		fmt.Printf("Unsupported profiling tool %s for language %s, default %s will be used ... 🧐\n",
 			profilingTool, target.Language, defaultTool)
 		target.ProfilingTool = defaultTool
 		return
@@ -355,7 +355,7 @@ func validateProfilingTool(profilingTool string, outputType string, target *conf
 func validateOutputType(outputType string, target *config.TargetConfig) {
 	defaultOutputType := api.GetOutputTypesByProfilingTool[target.ProfilingTool][0]
 	if outputType == "" {
-		fmt.Printf("Default output type %s will be used ... ✔\n", defaultOutputType)
+		fmt.Printf("Default output type %s will be used ... 🧐\n", defaultOutputType)
 		target.OutputType = defaultOutputType
 		return
 	}
