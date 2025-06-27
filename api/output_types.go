@@ -30,7 +30,7 @@ const (
 // The first one is considered the default
 var GetOutputTypesByProfilingTool = map[ProfilingTool][]OutputType{
 	AsyncProfiler: {FlameGraph, Jfr, Flat, Traces, Collapsed, Tree, Raw},
-	Jcmd:          {Jfr, ThreadDump, HeapDump, HeapHistogram},
+	Jcmd:          {Jfr, ThreadDump, HeapDump, HeapHistogram, Raw},
 	Pyspy:         {FlameGraph, SpeedScope, ThreadDump, Raw},
 	Bpf:           {FlameGraph, Raw},
 	Perf:          {FlameGraph, Raw},
@@ -38,7 +38,7 @@ var GetOutputTypesByProfilingTool = map[ProfilingTool][]OutputType{
 	NodeDummy:     {HeapSnapshot, HeapDump},
 	FakeTool:      {FlameGraph},
 	Austin:        {FlameGraph, Raw},
-	PProf:         {Pprof, HeapDump},
+	PProf:         {Pprof, HeapDump, Raw},
 }
 
 func AvailableOutputTypesString() string {
