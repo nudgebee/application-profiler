@@ -86,8 +86,12 @@ func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileNam
 		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
 		port, "heap", int(job.Interval.Seconds()),
 	)
+	// for local testing
+	// cmd := exec.Command(
+	// 	"curl", targetURL, "-o", fileName,
+	// )
 	cmd := exec.Command(
-		"curl", targetURL, "-o", fileName,
+		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
 	)
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
@@ -105,8 +109,12 @@ func (p *goPprofManager) cpuProfile(job *job.ProfilingJob, port string, fileName
 		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
 		port, "profile", int(job.Interval.Seconds()),
 	)
+	// for local testing
+	// cmd := exec.Command(
+	// 	"curl", targetURL, "-o", fileName,
+	// )
 	cmd := exec.Command(
-		"curl", targetURL, "-o", fileName,
+		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
 	)
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
@@ -127,7 +135,7 @@ func (p *goPprofManager) convertPprofToRaw(pprofFilePath string) (string, error)
 	err := cmd.Run()
 	if err != nil {
 		log.ErrorLogLn(out.String())
-		return nil, errors.Wrapf(err, "failed to convert pprof output %q to raw format error %s", pprofFilePath, stderr.String())
+		return "", errors.Wrapf(err, "failed to convert pprof output %q to raw format error %s", pprofFilePath, stderr.String())
 	}
 	return out.String(), nil
 
@@ -137,7 +145,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	port, err := findListeningPortForPID(job.PID)
 	if err != nil {
 		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, err))
-		port = "6060"
+		port = "8080"
 		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
 	rawFilePath := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, job.PID, job.Iteration)
@@ -170,7 +178,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to convert heap profile for PID %s", job.PID)
 		}
-		file.Write(rawFilePath, fmt.Sprintf("heap dump %s \n cpu dump %s", heapRaw, profileRaw))
+		file.Write(rawFilePath, fmt.Sprintf("heap dump\n %s \n cpu dump\n %s", heapRaw, profileRaw))
 	} else {
 		return errors.New("unsupported output type for Go pprof profiler")
 	}

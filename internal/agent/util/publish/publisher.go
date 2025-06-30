@@ -39,9 +39,17 @@ func (p publisher) Do(compressorType compressor.Type, filePath string, eventType
 	if err != nil {
 		return err
 	}
-
+	var compressedFile *os.File
 	resultFile := filePath + compressor.GetExtensionFileByCompressor[compressorType]
-	compressedFile, err := os.Create(resultFile)
+	if compressorType != compressor.None {
+		compressedFile, err = os.Create(resultFile)
+	} else {
+		// if no compressor is specified, we just use the original file as the result file
+		compressedFile, err = os.Open(resultFile)
+		if err != nil {
+			return errors.Wrapf(err, "could not open file %s", resultFile)
+		}
+	}
 	if err != nil {
 		return errors.Wrapf(err, "could not create result file %s", resultFile)
 	}
@@ -51,9 +59,11 @@ func (p publisher) Do(compressorType compressor.Type, filePath string, eventType
 		return err
 	}
 
-	err = comp.Encode(compressedFile, file)
-	if err != nil {
-		return errors.Wrapf(err, "could not compress file %s", resultFile)
+	if compressorType != compressor.None {
+		err = comp.Encode(compressedFile, file)
+		if err != nil {
+			return errors.Wrapf(err, "could not compress file %s", resultFile)
+		}
 	}
 
 	return log.EventLn(
