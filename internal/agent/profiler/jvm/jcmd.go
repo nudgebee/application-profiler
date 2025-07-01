@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	jfr                      = "jfr"
+	jfr                      = "/opt/jdk/bin/jfr"
 	jcmd                     = "/opt/jdk/bin/jcmd"
 	jfrSettingsImageFilePath = "/app/jfr/settings/jfr-profile.jfc"
 	jfrSettingsTmpFilePath   = "/tmp/jfr-profile.jfc"
