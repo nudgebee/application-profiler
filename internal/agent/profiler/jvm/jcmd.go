@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	jfr                      = "/opt/jdk/bin/jfr"
 	jcmd                     = "/opt/jdk/bin/jcmd"
 	jfrSettingsImageFilePath = "/app/jfr/settings/jfr-profile.jfc"
 	jfrSettingsTmpFilePath   = "/tmp/jfr-profile.jfc"
@@ -202,11 +203,34 @@ func (j *jcmdManager) handleProfilingResult(job *job.ProfilingJob, fileName stri
 		if err != nil {
 			return errors.Wrap(err, "could not save dump to file")
 		}
+	case api.Raw:
+		j.handleJcmdRecording(pid, job.Iteration, string(job.OutputType))
+		rawOutput, err := j.handleJFRFile(pid, fileName, string(job.OutputType))
+		if err != nil {
+			return errors.Wrap(err, "error while converting JFR file to raw output")
+		}
+		file.Write(fileName, rawOutput)
 	default:
 		log.DebugLogLn(out.String())
 	}
 
 	return nil
+}
+
+func (j *jcmdManager) handleJFRFile(pid string, fileName string, outputType string) (string, error) {
+	log.DebugLogLn(fmt.Sprintf("Converting JFr file to json raw for %s", pid))
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := silentJcmdCommander.Command(jfr, "summary", fileName)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.ErrorLogLn(stderr.String())
+		return "", err
+	}
+	outputTxt := out.String()
+	return outputTxt, nil
 }
 
 func (j *jcmdManager) handleJcmdRecording(pid string, iteration int, outputType string) {

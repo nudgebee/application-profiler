@@ -24,11 +24,23 @@ func GetResultFile(targetDir string, tool api.ProfilingTool, outputType api.Outp
 
 func GetFileExtension(tool api.ProfilingTool, outputType api.OutputType) string {
 	switch tool {
-	case api.Jcmd, api.AsyncProfiler:
+	case api.AsyncProfiler:
 		switch outputType {
 		case api.Jfr:
 			return ".jfr"
 		case api.ThreadDump, api.HeapHistogram, api.Flat, api.Traces, api.Collapsed, api.SpeedScope, api.Raw:
+			return ".txt"
+		case api.HeapDump:
+			return ".hprof"
+		default:
+			// api.FlameGraph
+			return ".html"
+		}
+	case api.Jcmd:
+		switch outputType {
+		case api.Jfr, api.Raw:
+			return ".jfr"
+		case api.ThreadDump, api.HeapHistogram, api.Flat, api.Traces, api.Collapsed, api.SpeedScope:
 			return ".txt"
 		case api.HeapDump:
 			return ".hprof"

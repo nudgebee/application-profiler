@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -80,6 +79,67 @@ func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 
 	return err, time.Since(start)
 }
+func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileName string) error {
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	targetURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
+		port, "heap", int(job.Interval.Seconds()),
+	)
+	// for local testing
+	// cmd := exec.Command(
+	// 	"curl", targetURL, "-o", fileName,
+	// )
+	cmd := exec.Command(
+		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
+	)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.ErrorLogLn(out.String())
+		return errors.Wrapf(err, "failed to nsenter+wget %q error %s", targetURL, stderr.String())
+	}
+	return nil
+}
+func (p *goPprofManager) cpuProfile(job *job.ProfilingJob, port string, fileName string) error {
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	targetURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
+		port, "profile", int(job.Interval.Seconds()),
+	)
+	// for local testing
+	// cmd := exec.Command(
+	// 	"curl", targetURL, "-o", fileName,
+	// )
+	cmd := exec.Command(
+		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
+	)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.ErrorLogLn(out.String())
+		return errors.Wrapf(err, "failed to nsenter+wget %q error %s", targetURL, stderr.String())
+	}
+	return nil
+}
+func (p *goPprofManager) convertPprofToRaw(pprofFilePath string) (string, error) {
+	// Convert the pprof output to raw format using go tool pprof
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.Command("go", "tool", "pprof", "--raw", pprofFilePath)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.ErrorLogLn(out.String())
+		return "", errors.Wrapf(err, "failed to convert pprof output %q to raw format error %s", pprofFilePath, stderr.String())
+	}
+	return out.String(), nil
+
+}
 
 func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 	port, err := findListeningPortForPID(job.PID)
@@ -88,41 +148,42 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		port = "8080"
 		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
-
-	profileType := "profile"
+	rawFilePath := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, job.PID, job.Iteration)
 	if job.OutputType == api.HeapDump {
-		profileType = "heap"
+		err = m.heapProfile(job, port, rawFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch heap profile for PID %s", job.PID)
+		}
+	} else if job.OutputType == api.Pprof {
+		err = m.cpuProfile(job, port, rawFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch CPU profile for PID %s", job.PID)
+		}
+	} else if job.OutputType == api.Raw {
+		profileFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "cpu", job.PID, job.Iteration)
+		err = m.cpuProfile(job, port, profileFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to create CPU profile for PID %s", job.PID)
+		}
+		profileRaw, err := m.convertPprofToRaw(profileFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to convert CPU profile for PID %s", job.PID)
+		}
+		heapFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "heap", job.PID, job.Iteration)
+		err = m.heapProfile(job, port, heapFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch heap profile for PID %s", job.PID)
+		}
+		heapRaw, err := m.convertPprofToRaw(heapFilePath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to convert heap profile for PID %s", job.PID)
+		}
+		file.Write(rawFilePath, fmt.Sprintf("heap dump\n %s \n cpu dump\n %s", heapRaw, profileRaw))
+	} else {
+		return errors.New("unsupported output type for Go pprof profiler")
 	}
-
-	// Build the real HTTP URL
-	targetURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
-		port, profileType, int(job.Interval.Seconds()),
-	)
-
-	// Shell out to nsenter + wget
-	cmd := exec.Command(
-		"nsenter", "-t", job.PID, "-n",
-		"wget", "-qO", "-", targetURL,
-	)
-
-	// Capture stdout of the command directly into a file
-	rawFile := common.GetResultFile(common.TmpDir(), job.Tool, api.Pprof, job.PID, job.Iteration)
-	out, err := os.Create(rawFile)
-	if err != nil {
-		return errors.Wrap(err, "could not create profile file")
-	}
-	defer out.Close()
-
-	cmd.Stdout = out
-	cmd.Stderr = os.Stderr // so you’ll see any wget errors in your logs
-
-	if err := cmd.Run(); err != nil {
-		return errors.Wrapf(err, "failed to nsenter+wget %q", targetURL)
-	}
-
 	// Finally, publish the file as before
-	return m.publisher.Do(job.Compressor, rawFile, job.OutputType)
+	return m.publisher.Do(job.Compressor, rawFilePath, job.OutputType)
 }
 
 func findListeningPortForPID(pid string) (string, error) {
