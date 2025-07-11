@@ -21,6 +21,7 @@ const (
 	Callgrind     OutputType = "callgrind"
 	Raw           OutputType = "raw"
 	Pprof         OutputType = "pprof"
+	FlameJson     OutputType = "flame-json" // Used for AsyncProfiler flamegraph in JSON format
 	Summary       OutputType = "summary"
 	SummaryByLine OutputType = "summary-by-line"
 	HeapSnapshot  OutputType = "heapsnapshot"
