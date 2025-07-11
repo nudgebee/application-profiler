@@ -354,20 +354,20 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		port = "8080"
 		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
-	resultFilePath := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, job.PID, job.Iteration)
+	rawFilePath := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, job.PID, job.Iteration)
 	if job.OutputType == api.HeapDump {
-		err = m.heapProfile(job, port, resultFilePath)
+		err = m.heapProfile(job, port, rawFilePath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to fetch heap profile for PID %s", job.PID)
 		}
 	} else if job.OutputType == api.Pprof {
-		err = m.cpuProfile(job, port, resultFilePath)
+		err = m.cpuProfile(job, port, rawFilePath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to fetch CPU profile for PID %s", job.PID)
 		}
 	} else if job.OutputType == api.FlameJson {
-		err = m.cpuProfile(job, port, resultFilePath)
 		profileFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "cpu", job.PID, job.Iteration)
+		err = m.cpuProfile(job, port, profileFilePath)
 		if err != nil {
 			return errors.Wrapf(err, "failed to fetch CPU profile for PID %s", job.PID)
 		}
@@ -379,7 +379,7 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to convert raw profile to JSON for PID %s", job.PID)
 		}
-		file.Write(resultFilePath, flameJson)
+		file.Write(rawFilePath, flameJson)
 
 	} else if job.OutputType == api.Raw {
 		profileFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "cpu", job.PID, job.Iteration)
@@ -400,12 +400,12 @@ func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to convert heap profile for PID %s", job.PID)
 		}
-		file.Write(resultFilePath, fmt.Sprintf("heap dump\n %s \n cpu dump\n %s", heapRaw, profileRaw))
+		file.Write(rawFilePath, fmt.Sprintf("heap dump\n %s \n cpu dump\n %s", heapRaw, profileRaw))
 	} else {
 		return errors.New("unsupported output type for Go pprof profiler")
 	}
 	// Finally, publish the file as before
-	return m.publisher.Do(job.Compressor, resultFilePath, job.OutputType)
+	return m.publisher.Do(job.Compressor, rawFilePath, job.OutputType)
 }
 
 func findListeningPortForPID(pid string) (string, error) {

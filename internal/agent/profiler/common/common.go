@@ -87,7 +87,15 @@ func GetFileExtension(tool api.ProfilingTool, outputType api.OutputType) string 
 			return ".svg"
 		}
 	case api.PProf:
-		return ".pprof"
+		switch outputType {
+		case api.Raw:
+			return ".txt"
+		case api.FlameJson:
+			return ".json"
+		default:
+			// api.FlameGraph
+			return ".pprof"
+		}
 	default:
 		// api.FlameGraph
 		return ".svg"

@@ -39,7 +39,7 @@ var GetOutputTypesByProfilingTool = map[ProfilingTool][]OutputType{
 	NodeDummy:     {HeapSnapshot, HeapDump},
 	FakeTool:      {FlameGraph},
 	Austin:        {FlameGraph, Raw},
-	PProf:         {Pprof, HeapDump, Raw},
+	PProf:         {Pprof, HeapDump, Raw, FlameJson},
 }
 
 func AvailableOutputTypesString() string {
@@ -64,6 +64,7 @@ var (
 		Summary,
 		SummaryByLine,
 		HeapSnapshot,
+		FlameJson,
 	}
 )
 
