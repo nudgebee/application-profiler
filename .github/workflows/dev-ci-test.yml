@@ -1,0 +1,62 @@
+name: CI on VM with Docker Execution
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    container:
+      image: registry.nudgebee.com/profiler-vm:latest   
+      options: --privileged  
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y \
+            curl \
+            git \
+            unzip \
+            python3 \
+            python3-pip \
+            docker.io \
+            awscli \
+            && rm -rf /var/lib/apt/lists/*
+
+      - name: Create tag name
+        run: echo "tag=$(date +'%Y-%m-%dT%H-%M-%S')_$GITHUB_SHA" >> $GITHUB_ENV
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 864186153326.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build and Push JVM Alpine Agent Image
+        run: |
+          docker build -t 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-jvm:${{ env.tag }} -f docker/jvm/alpine/Dockerfile .
+          docker push 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-jvm:${{ env.tag }}
+
+      - name: Build and Push BPF Agent Image
+        run: |
+          docker build -t 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-bpf:${{ env.tag }} -f docker/bpf/Dockerfile .
+          docker push 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-bpf:${{ env.tag }}
+
+      - name: Build and Push Python Agent Image
+        run: |
+          docker build -t 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-python:${{ env.tag }} -f docker/python/Dockerfile .
+          docker push 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-python:${{ env.tag }}
+
+      - name: Build and Push Perf Agent Image
+        run: |
+          docker build -t 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-perf:${{ env.tag }} -f docker/perf/Dockerfile .
+          docker push 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-perf:${{ env.tag }}
