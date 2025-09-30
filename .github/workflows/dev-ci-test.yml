@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: self-hosted
     container:
-      image: registry.nudgebee.com/profiler-vm:latest   
+      image: registry.dev.nudgebee.pollux.in/profiler-vm:latest
       options: --privileged  
 
     steps:
