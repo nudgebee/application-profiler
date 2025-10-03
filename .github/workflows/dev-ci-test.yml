@@ -9,8 +9,7 @@ jobs:
     runs-on: self-hosted
     container:
       image: registry.dev.nudgebee.pollux.in/profiler-vm:latest
-      options: --privileged  
-
+      
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
