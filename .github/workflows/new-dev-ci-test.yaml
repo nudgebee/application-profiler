@@ -1,0 +1,50 @@
+name: Dev Build and Push Images
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  # Step 0: Create tag environment variable
+  set-tag:
+    runs-on: self-hosted
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Create tag name
+        id: tag
+        run: echo "::set-output name=tag::$(date +'%Y-%m-%dT%H-%M-%S')_${GITHUB_SHA}"
+
+  # Reusable job to build and push an agent image
+  build-push-image:
+    needs: set-tag
+    runs-on: self-hosted
+    container:
+      image: registry.dev.nudgebee.pollux.in/profiler-vm:latest
+    strategy:
+      matrix:
+        agent: [jvm, bpf, python, perf]
+        dockerfile: [docker/jvm/alpine/Dockerfile, docker/bpf/Dockerfile, docker/python/Dockerfile, docker/perf/Dockerfile]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and Push Agent Image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: 864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-${{ matrix.agent }}:${{ needs.set-tag.outputs.tag }}
+          cache-from: type=registry,ref=864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-${{ matrix.agent }}:latest
+          cache-to: type=registry,ref=864186153326.dkr.ecr.us-east-1.amazonaws.com/nudgebee-profiler-${{ matrix.agent }}:cache,mode=max
