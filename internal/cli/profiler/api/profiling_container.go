@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/josepdcs/kubectl-prof/internal/agent/util",
+
 	"bufio"
 	"bytes"
 	"context"
@@ -59,6 +61,8 @@ func (p *profilingContainerApi) HandleProfilingContainerLogs(pod *v1.Pod, contai
 	if stringUtils.IsBlank(containerName) {
 		return nil, nil, errors.New("container name is mandatory for handling its logs")
 	}
+			containerName = util.NormalizeContainerID(containerName)
+
 	req := p.connectionInfo.ClientSet.CoreV1().
 		Pods(pod.Namespace).
 		GetLogs(pod.Name, &v1.PodLogOptions{
