@@ -76,10 +76,15 @@ func printJob(job *batchv1.Job) error {
 
 func (p *profilingJobApi) GetProfilingPod(cfg *config.ProfilerConfig, ctx context.Context, timeout time.Duration) (*v1.Pod, error) {
 	var pod *v1.Pod
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+minTimeout := 60 * time.Second
+		actualTimeout := timeout
+		if actualTimeout < minTimeout {
+			actualTimeout = minTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), actualTimeout)
 	defer cancel()
 
-	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, timeout, true,
+err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true,
 		func(ctx context.Context) (bool, error) {
 			podList, err := p.connectionInfo.ClientSet.
 				CoreV1().

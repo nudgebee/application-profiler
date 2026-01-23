@@ -296,7 +296,7 @@ func Test_profilingJobAdapter_GetProfilingPod(t *testing.T) {
 							},
 						},
 						ctx:     context.TODO(),
-						timeout: 1 * time.Second,
+timeout: 70 * time.Second,
 					}
 			},
 			when: func(f fields, a args) result {
@@ -355,7 +355,7 @@ func Test_profilingJobAdapter_GetProfilingPod(t *testing.T) {
 							},
 						},
 						ctx:     context.TODO(),
-						timeout: 1 * time.Second,
+timeout: 70 * time.Second,
 					}
 			},
 			when: func(f fields, a args) result {
@@ -395,7 +395,7 @@ func Test_profilingJobAdapter_GetProfilingPod(t *testing.T) {
 							},
 						},
 						ctx:     context.TODO(),
-						timeout: 1 * time.Second,
+timeout: 70 * time.Second,
 					}
 			},
 			when: func(f fields, a args) result {
