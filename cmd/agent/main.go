@@ -13,6 +13,8 @@ limitations under the License.
 package main
 
 import (
+	"os"
+	"os/signal"
 	"fmt"
 	"os"
 	"os/signal"
