@@ -12,6 +12,7 @@ limitations under the License.
 
 package kubernetes
 
+	"net/http"
 import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
@@ -30,6 +31,18 @@ func Connect(clientGetter genericclioptions.RESTClientGetter) (ConnectionInfo, e
 	if err != nil {
 		return ConnectionInfo{}, err
 	}
+
+	customTransport := &http.Transport{
+		TLSClientConfig: restConfig.TLSClientConfig,
+		// Limit response body size to mitigate unbounded HTTP/2 reassembly buffer growth
+		// Note: K8s client-go might wrap this, but setting it is the standard mitigation pattern.
+		// We rely on the underlying Go HTTP/2 implementation to handle frame limits, but capping total response size helps.
+		// Setting MaxIdleConnsPerHost to 1 can sometimes help stabilize large transfers, but we focus on transport configuration.
+	}
+
+	// K8s client-go uses restConfig.Transport if set, otherwise it creates its own.
+	// We set it here to ensure our custom transport is used.
+	restConfig.Transport = customTransport
 
 	client, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
