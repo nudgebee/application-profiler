@@ -84,13 +84,18 @@ func (p *profilingContainerApi) HandleProfilingContainerLogs(pod *v1.Pod, contai
 			}
 		}(readCloser)
 
-		r := bufio.NewReader(readCloser)
-		for {
-			bytes, err := r.ReadBytes('\n')
-			if err != nil {
+			for {
+			buffer := make([]byte, 4096)
+			n, err := readCloser.Read(buffer)
+			if err != nil && err != io.EOF {
 				return
 			}
-			eventsChan <- string(bytes)
+			if n > 0 {
+				eventsChan <- string(buffer[:n])
+			}
+			if err == io.EOF {
+				return
+			}
 		}
 	}()
 
