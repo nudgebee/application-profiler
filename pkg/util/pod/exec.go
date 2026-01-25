@@ -4,6 +4,8 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	"k8s.io/api/policy/v1"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -26,6 +28,9 @@ type Exec struct {
 
 // NewExec create new Exec
 func NewExec(config *rest.Config, client kubernetes.Interface) *Exec {
+	// Register policy/v1 group to handle PSPs if present in the cluster
+	policyv1.AddToScheme(scheme.Scheme())
+
 	config.APIPath = "/api"
 	config.GroupVersion = &schema.GroupVersion{Version: "v1"}
 	config.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
