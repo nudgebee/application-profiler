@@ -170,7 +170,7 @@ func NewProfileCommand(streams genericiooptions.IOStreams) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&showVersion, "version", false, "Print version info")
+cmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Print version info")
 
 	cmd.Flags().StringVar(&target.LabelSelector, "selector", "", "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2). Matching objects must satisfy all of the specified label constraints.")
 	cmd.Flags().IntVar(&target.PoolSizeLaunchProfilingJobs, "pool-size-profiling-jobs", defaultPoolSizeLaunchProfilingJobs, "The pool size of goroutines for launching profiling jobs when the '--selector' flag is used (default \"No limit: all matching pods will be profiled simultaneously\")")
