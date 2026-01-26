@@ -27,7 +27,7 @@ type Exec struct {
 // NewExec create new Exec
 func NewExec(config *rest.Config, client kubernetes.Interface) *Exec {
 	config.APIPath = "/api"
-	config.GroupVersion = &schema.GroupVersion{Version: "v1"}
+	// config.GroupVersion = &schema.GroupVersion{Version: "v1"} // REMOVED: Restrictive setting causing failure to discover non-core APIs like policy/v1
 	config.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
 	return &Exec{
 		RestConfig: config,
