@@ -271,6 +271,10 @@ if debug or args.ebpf:
         exit()
 
 # initialize BPF & perf_events
+	try:
+	except Exception as e:
+		print(f"Error initializing BPF in profile: {e}", file=stderr)
+		exit(1)
 b = BPF(text=bpf_text)
 b.attach_perf_event(ev_type=PerfType.SOFTWARE,
                     ev_config=PerfSWConfig.CPU_CLOCK, fn_name="do_perf_event",

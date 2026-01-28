@@ -148,6 +148,10 @@ if (debug):
     print(bpf_text)
 
 # initialize BPF
+	try:
+	except Exception as e:
+		print(f"Error initializing BPF in mallocstacks: {e}", file=stderr)
+		exit(1)
 b = BPF(text=bpf_text)
 if args.pid is not None:
     tpid = args.pid
