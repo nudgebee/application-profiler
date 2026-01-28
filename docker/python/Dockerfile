@@ -11,7 +11,7 @@ RUN pip3 install py-spy==0.4.0  \
     && git clone https://github.com/brendangregg/FlameGraph
 
 FROM python:3.13.1-alpine
-RUN apk add --update --no-cache perl procps strace  \
+RUN apk add --update --no-cache perl procps strace ca-certificates  \
     && mkdir -p /app/FlameGraph
 COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
