@@ -13,6 +13,9 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
+	"net/http"
+
 	"fmt"
 	"os"
 	"os/signal"
@@ -169,6 +172,8 @@ func runApp() error {
 			period, errParse := time.ParseDuration(c.String(profile.GracePeriodForEnding))
 			if errParse == nil {
 				gracePeriod = period
+				initHTTPClient()
+
 			}
 
 			var err error
