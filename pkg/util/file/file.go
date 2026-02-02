@@ -13,7 +13,7 @@ import (
 )
 
 func Exists(file string) bool {
-	if _, err := os.Stat(file); err == nil {
+	if _, err := os.Lstat(file); err == nil {
 		return true
 	}
 	return false
@@ -60,7 +60,7 @@ func RemoveAll(dir string, pattern string) {
 
 // Size returns the file size
 func Size(file string) int64 {
-	fileInfo, err := os.Stat(file)
+	fileInfo, err := os.Lstat(file)
 	if err != nil {
 		log.WarningLogLn(fmt.Sprintf("file could no be obtained: %s", err))
 		return 0
@@ -129,7 +129,7 @@ func MergeFiles(outputPath string, inputPaths []string) {
 
 // Copy copies a file from source to destination
 func Copy(src, dst string) (int64, error) {
-	sourceFileStat, err := os.Stat(src)
+	sourceFileStat, err := os.Lstat(src)
 	if err != nil {
 		return 0, err
 	}
