@@ -1,6 +1,7 @@
 package util
 
 import (
+	"sync"
 	"bytes"
 	"fmt"
 	"regexp"
@@ -148,7 +149,27 @@ func GetCandidatePIDs(job *job.ProfilingJob) ([]string, error) {
 
 	// When applications launch subprocesses, their PIDs need to be identified for profiling.
 	var pidsToProfile []string
-	fillWithChildrenPIDs(pid, &pidsToProfile)
+	var wg sync.WaitGroup
+	results := make(chan string, len(pidsToProfile)+1)
+	fillWithChildrenPIDs(pid, &pidsToProfile, &wg, results)
+	wg.Wait()
+	close(results)
+
+	for p := range results {
+		pidsToProfile = append(pidsToProfile, p)
+	}
+	results := make(chan string, len(pidsToProfile)+1)
+	fillWithChildrenPIDs(pid, &pidsToProfile, &wg, results)
+	wg.Wait()
+	close(results)
+
+	ok := false
+	for !ok {
+		p, ok = <- results
+		if ok {
+			pidsToProfile = append(pidsToProfile, p)
+		}
+	}
 	if len(pidsToProfile) == 0 {
 		return nil, errors.Errorf("no PIDs found for container ID: %s", job.ContainerID)
 	}
@@ -172,22 +193,26 @@ func GetCandidatePIDs(job *job.ProfilingJob) ([]string, error) {
 	return pidsToProfile, nil
 }
 
-// fillWithChildrenPIDs fills the given slice with the PIDs of the children processes of the given PID
-func fillWithChildrenPIDs(pid string, pidsToProfile *[]string) {
-	child := childPIDGetterInstance.get(pid)
-	if stringUtils.IsNotBlank(child) {
-		pids := strings.Split(child, "\n")
-		if len(pids) > 1 {
-			log.DebugLogLn(fmt.Sprintf("Detected more than one child process %v for PID: %s", pids, pid))
-			for _, p := range pids {
-				fillWithChildrenPIDs(p, pidsToProfile)
+// fillWithChildrenPIDs concurrently finds all child PIDs recursively using goroutines.
+func fillWithChildrenPIDs(pid string, pidsToProfile *[]string, wg *sync.WaitGroup, results chan string) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		child := childPIDGetterInstance.get(pid)
+		if stringUtils.IsNotBlank(child) {
+			pids := strings.Split(child, "\n")
+			if len(pids) > 1 {
+				log.DebugLogLn(fmt.Sprintf("Detected more than one child process %v for PID: %s", pids, pid))
+				for _, p := range pids {
+					fillWithChildrenPIDs(p, pidsToProfile, wg, results)
+				}
+				return
 			}
-			return
+			fillWithChildrenPIDs(child, pidsToProfile, wg, results)
+		} else {
+			results <- pid
 		}
-		fillWithChildrenPIDs(child, pidsToProfile)
-	} else {
-		*pidsToProfile = append(*pidsToProfile, pid)
-	}
+	}()
 }
 
 func filterPIDsToProfile(pids *[]string, pgrep string) error {
