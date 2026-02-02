@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/cmd/exec"
 )
+	policyv1 "k8s.io/api/policy/v1"
 
 // Executor interface for execute command on pod
 type Executor interface {
@@ -27,6 +28,9 @@ type Exec struct {
 // NewExec create new Exec
 func NewExec(config *rest.Config, client kubernetes.Interface) *Exec {
 	config.APIPath = "/api"
+	if err := policyv1.AddToScheme(scheme.Scheme); err != nil {
+		// Log error if registration fails, though usually safe to ignore if client-go is standard
+	}
 	config.GroupVersion = &schema.GroupVersion{Version: "v1"}
 	config.NegotiatedSerializer = serializer.WithoutConversionCodecFactory{CodecFactory: scheme.Codecs}
 	return &Exec{
