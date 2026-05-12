@@ -3,7 +3,7 @@ package profiler
 import (
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
 )
 
 // FakeNodeDummyManager is an interface that wraps the NodeDummyManager interface

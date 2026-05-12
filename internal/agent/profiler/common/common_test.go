@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/config"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/config"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
 	"github.com/stretchr/testify/assert"
 )
 

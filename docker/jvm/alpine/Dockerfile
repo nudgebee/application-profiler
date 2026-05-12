@@ -1,10 +1,10 @@
 ARG JAVA_VERSION_TAG=21
 ARG ASYNCP_VERSION=2.9
 FROM golang:1.23.4-alpine AS agentbuild
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof
-COPY . /go/src/github.com/josepdcs/kubectl-prof
+WORKDIR /go/src/github.com/nudgebee/application-profiler
+COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof/cmd/agent
+WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
 FROM amazoncorretto:11-alpine-jdk AS async-profiler-builder
@@ -35,13 +35,13 @@ FROM alpine:3.21.0
 RUN mkdir -p /app/async-profiler/build  \
     && apk add --no-cache procps coreutils
 COPY --from=agentbuild /go/bin/agent /app
-COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/jvm/profiler.sh /app/async-profiler
+COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/jvm/profiler.sh /app/async-profiler
 COPY --from=async-profiler-builder /src/async-profiler/build /app/async-profiler/build
 COPY --from=tools /jcmd /opt/jdk
 RUN chmod +x /app/async-profiler/profiler.sh  \
     && mkdir -p /app/jfr/settings
-COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/jvm/jfr-profile.jfc /app/jfr/settings
-COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/get-ps-command.sh /app/get-ps-command.sh
+COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/jvm/jfr-profile.jfc /app/jfr/settings
+COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/get-ps-command.sh /app/get-ps-command.sh
 RUN chmod +x /app/get-ps-command.sh
 
 CMD [ "/app/agent" ]

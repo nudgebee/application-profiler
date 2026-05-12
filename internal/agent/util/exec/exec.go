@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 )
 
 type Commander interface {

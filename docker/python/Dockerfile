@@ -1,8 +1,8 @@
 FROM golang:1.23.4-alpine AS agentbuild
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof
-COPY . /go/src/github.com/josepdcs/kubectl-prof
+WORKDIR /go/src/github.com/nudgebee/application-profiler
+COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof/cmd/agent
+WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
 FROM python:3.13.1-slim-bullseye AS pyspybuild
@@ -16,7 +16,7 @@ RUN apk add --update --no-cache perl procps strace  \
 COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 COPY --from=pyspybuild /usr/local/bin/py-spy /app/py-spy
-COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/get-ps-command.sh /app/get-ps-command.sh
+COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/get-ps-command.sh /app/get-ps-command.sh
 RUN pip3 install austin-dist==3.7.0
 RUN chmod +x /app/get-ps-command.sh
 

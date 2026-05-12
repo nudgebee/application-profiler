@@ -3,7 +3,7 @@ package exec
 import (
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

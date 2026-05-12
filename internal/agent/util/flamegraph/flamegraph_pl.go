@@ -8,8 +8,8 @@ import (
 	"reflect"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 )
 
 // FlameGrapherScript encapsulates the flamegraph.pl script (with its complete path) and the options that can be passed to it.

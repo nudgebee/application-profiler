@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
-	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
-	fileutils "github.com/josepdcs/kubectl-prof/pkg/util/file"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/pkg/util/compressor"
+	fileutils "github.com/nudgebee/application-profiler/pkg/util/file"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/pkg/errors"
 )
 

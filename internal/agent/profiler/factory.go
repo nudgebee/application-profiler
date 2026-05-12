@@ -3,11 +3,11 @@ package profiler
 import (
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/jvm"
-	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler/jvm"
+	executil "github.com/nudgebee/application-profiler/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/internal/agent/util/publish"
 )
 
 // Profiler is the interface that wraps the basic profiling operations.

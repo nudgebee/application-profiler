@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/config"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/common"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/internal/agent/config"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler/common"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 )
