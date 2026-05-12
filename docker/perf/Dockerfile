@@ -1,4 +1,4 @@
-FROM golang:1.24-bullseye AS agentbuild
+FROM golang:1.26.3-bullseye AS agentbuild
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
