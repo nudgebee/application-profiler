@@ -1,5 +1,5 @@
 ARG JAVA_VERSION_TAG=21
-FROM golang:1.24.6-bullseye AS agentbuild
+FROM golang:1.26-bullseye AS agentbuild
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
