@@ -5,11 +5,11 @@ RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM alpine:3.21.0 AS tools
+FROM alpine:3.23.4 AS tools
 RUN apk add --no-cache git  \
     && git clone https://github.com/brendangregg/FlameGraph
 
-FROM alpine:3.21.0
+FROM alpine:3.23.4
 RUN apk add --no-cache perf perl procps \
     && mkdir -p /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
