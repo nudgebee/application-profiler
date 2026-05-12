@@ -12,13 +12,8 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e
 	github.com/samber/lo v1.47.0
-	github.com/sirupsen/logrus v1.9.3
-	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.5
-	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67
-	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
 	k8s.io/cli-runtime v0.32.0
 	k8s.io/client-go v0.32.0
@@ -66,6 +61,8 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/spf13/cobra v1.8.1 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
@@ -76,10 +73,12 @@ require (
 	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
+	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/protobuf v1.36.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	k8s.io/api v0.32.0 // indirect
 	k8s.io/component-base v0.32.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20241212222426-2c72e554b1e7 // indirect
