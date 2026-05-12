@@ -7,7 +7,7 @@ RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM amazoncorretto:11-alpine-jdk AS async-profiler-builder
+FROM amazoncorretto:26-alpine-jdk AS async-profiler-builder
 ARG TARGETPLATFORM
 ARG ASYNCP_VERSION=2.9
 RUN apk add --no-cache curl g++ git linux-headers make musl-dev tar wget
