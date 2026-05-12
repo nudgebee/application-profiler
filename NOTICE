@@ -1,0 +1,34 @@
+application-profiler
+Copyright 2026 Nudgebee, Inc.
+
+This product is licensed under the Apache License, Version 2.0
+(see LICENSE).
+
+This product is derived from prior works:
+
+  kubectl-prof
+  https://github.com/josepdcs/kubectl-prof
+  Copyright 2022-2025 Josep de los Santos and contributors.
+  Licensed under the Apache License, Version 2.0.
+
+  kubectl-flame (the original ancestor)
+  https://github.com/yahoo/kubectl-flame
+  Copyright Verizon Media (now Yahoo).
+  Licensed under the Apache License, Version 2.0.
+
+Substantial portions of the agent and per-language profiler implementations
+were originally authored as part of the works above. Copyright notices in
+files that were preserved from those upstreams remain in place. Files added
+or rewritten in this fork are © 2026 Nudgebee, Inc.
+
+Third-party tools bundled into container images keep their own licenses,
+including (non-exhaustively):
+
+  async-profiler (Apache-2.0) — https://github.com/async-profiler/async-profiler
+  py-spy (MIT)               — https://github.com/benfred/py-spy
+  rbspy (MIT)                — https://github.com/rbspy/rbspy
+  austin (GPL-3.0)           — https://github.com/P403n1x87/austin
+  FlameGraph (CDDL-1.0)      — https://github.com/brendangregg/FlameGraph
+  BCC (Apache-2.0)           — https://github.com/iovisor/bcc
+
+See each tool's repository for full license text.

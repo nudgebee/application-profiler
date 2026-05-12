@@ -1,4 +1,12 @@
 .idea/
 .run/
+.vscode/
 bin/
 coverage.out
+
+# macOS
+.DS_Store
+
+# Editor temp files
+*.swp
+*~
