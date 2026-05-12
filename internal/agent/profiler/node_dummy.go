@@ -7,13 +7,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/config"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/common"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
-	"github.com/josepdcs/kubectl-prof/pkg/util/file"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/internal/agent/config"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler/common"
+	"github.com/nudgebee/application-profiler/internal/agent/util"
+	"github.com/nudgebee/application-profiler/internal/agent/util/publish"
+	"github.com/nudgebee/application-profiler/pkg/util/file"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/pkg/errors"
 )
 

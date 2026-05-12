@@ -3,10 +3,10 @@ package profile
 import (
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/jvm"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler/jvm"
 	"github.com/stretchr/testify/assert"
 )
 

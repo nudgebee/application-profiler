@@ -1,8 +1,8 @@
 FROM golang:1.23.4-alpine AS agentbuild
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof
-COPY . /go/src/github.com/josepdcs/kubectl-prof
+WORKDIR /go/src/github.com/nudgebee/application-profiler
+COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof/cmd/agent
+WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
 FROM alpine:3.21.0

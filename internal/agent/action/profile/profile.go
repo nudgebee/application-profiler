@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util"
-	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler"
+	"github.com/nudgebee/application-profiler/internal/agent/util"
+	"github.com/nudgebee/application-profiler/pkg/util/compressor"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/pkg/errors"
 )
 

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	executil "github.com/nudgebee/application-profiler/internal/agent/util/exec"
 )
 
 func TestAustin(t *testing.T) {

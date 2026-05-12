@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
 	"github.com/pkg/errors"
 )
 

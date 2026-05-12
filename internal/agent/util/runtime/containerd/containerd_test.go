@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/testdata"
+	"github.com/nudgebee/application-profiler/internal/agent/testdata"
 	"github.com/stretchr/testify/assert"
 )
 

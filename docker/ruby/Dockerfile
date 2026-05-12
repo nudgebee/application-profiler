@@ -1,8 +1,8 @@
 FROM golang:1.23-bullseye AS agentbuild
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof
-COPY . /go/src/github.com/josepdcs/kubectl-prof
+WORKDIR /go/src/github.com/nudgebee/application-profiler
+COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
-WORKDIR /go/src/github.com/josepdcs/kubectl-prof/cmd/agent
+WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
 FROM rust:1.83-bullseye AS rbspybuild
@@ -20,7 +20,7 @@ RUN apt-get update  \
 COPY --from=rbspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 COPY --from=rbspybuild /rbspy/target/release/rbspy /app/rbspy
-COPY --from=agentbuild /go/src/github.com/josepdcs/kubectl-prof/contrib/get-ps-command.sh /app/get-ps-command.sh
+COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/get-ps-command.sh /app/get-ps-command.sh
 RUN chmod +x /app/get-ps-command.sh
 
 CMD [ "/app/agent" ]

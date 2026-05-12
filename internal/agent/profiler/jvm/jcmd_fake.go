@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/pkg/util/compressor"
 )
 
 // FakeJcmdManager is an interface that wraps the JcmdManager interface

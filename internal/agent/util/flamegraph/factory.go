@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
 )
 
 // FrameGrapher is an interface for converting stacks samples to flame graphs

@@ -1,4 +1,4 @@
-module github.com/josepdcs/kubectl-prof
+module github.com/nudgebee/application-profiler
 
 go 1.23.4
 

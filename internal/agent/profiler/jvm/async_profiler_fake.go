@@ -3,7 +3,7 @@ package jvm
 import (
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
 )
 
 // FakeAsyncProfilerManager is an interface that wraps the AsyncProfilerManager interface

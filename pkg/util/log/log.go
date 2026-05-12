@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/josepdcs/kubectl-prof/api"
+	"github.com/nudgebee/application-profiler/api"
 	jsoniter "github.com/json-iterator/go"
 )
 

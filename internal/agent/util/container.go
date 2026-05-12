@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/containerd"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/crio"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/runtime/fake"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/internal/agent/util/runtime/containerd"
+	"github.com/nudgebee/application-profiler/internal/agent/util/runtime/crio"
+	"github.com/nudgebee/application-profiler/internal/agent/util/runtime/fake"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/pkg/errors"
 )
 

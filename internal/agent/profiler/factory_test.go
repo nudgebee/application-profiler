@@ -3,10 +3,10 @@ package profiler
 import (
 	"testing"
 
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler/jvm"
-	executil "github.com/josepdcs/kubectl-prof/internal/agent/util/exec"
-	"github.com/josepdcs/kubectl-prof/internal/agent/util/publish"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler/jvm"
+	executil "github.com/nudgebee/application-profiler/internal/agent/util/exec"
+	"github.com/nudgebee/application-profiler/internal/agent/util/publish"
 	"github.com/stretchr/testify/assert"
 )
 

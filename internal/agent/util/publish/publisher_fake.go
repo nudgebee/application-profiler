@@ -1,8 +1,8 @@
 package publish
 
 import (
-	"github.com/josepdcs/kubectl-prof/api"
-	"github.com/josepdcs/kubectl-prof/pkg/util/compressor"
+	"github.com/nudgebee/application-profiler/api"
+	"github.com/nudgebee/application-profiler/pkg/util/compressor"
 )
 
 // FakePublisher is an interface that wraps the Publisher interface

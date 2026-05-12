@@ -19,10 +19,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/josepdcs/kubectl-prof/internal/agent/action/profile"
-	"github.com/josepdcs/kubectl-prof/internal/agent/job"
-	"github.com/josepdcs/kubectl-prof/internal/agent/profiler"
-	"github.com/josepdcs/kubectl-prof/pkg/util/log"
+	"github.com/nudgebee/application-profiler/internal/agent/action/profile"
+	"github.com/nudgebee/application-profiler/internal/agent/job"
+	"github.com/nudgebee/application-profiler/internal/agent/profiler"
+	"github.com/nudgebee/application-profiler/pkg/util/log"
 	"github.com/urfave/cli/v2"
 )
 
