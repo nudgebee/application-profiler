@@ -5,12 +5,12 @@ RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM python:3.13.1-slim-bullseye AS pyspybuild
+FROM python:3.13.6-slim-bullseye AS pyspybuild
 RUN pip3 install py-spy==0.4.0  \
     && apt-get update && apt-get install -y git \
     && git clone https://github.com/brendangregg/FlameGraph
 
-FROM python:3.13.1-alpine
+FROM python:3.14.0-alpine
 RUN apk add --update --no-cache perl procps strace  \
     && mkdir -p /app/FlameGraph
 COPY --from=pyspybuild /FlameGraph /app/FlameGraph
