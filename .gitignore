@@ -10,3 +10,16 @@ coverage.out
 # Editor temp files
 *.swp
 *~
+
+# Secrets and credentials
+*.env
+.env.*
+*.pem
+*.key
+*.kubeconfig
+credentials.*
+
+# Go
+vendor/
+*.test
+*.out

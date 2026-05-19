@@ -5,14 +5,14 @@ RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM rust:1.95-bullseye AS rbspybuild
+FROM rust:1.95-bookworm AS rbspybuild
 WORKDIR /
 RUN git clone https://github.com/brendangregg/FlameGraph  \
     && git clone --depth 1 --branch v0.27.0 https://github.com/rbspy/rbspy
 WORKDIR /rbspy
 RUN cargo build --release
 
-FROM bitnami/minideb:bullseye
+FROM bitnami/minideb:bookworm
 RUN apt-get update  \
     && apt-get install -y procps strace  \
     && apt-get clean \
