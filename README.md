@@ -1,5 +1,9 @@
 # application-profiler
 
+[![Build](https://github.com/nudgebee/application-profiler/actions/workflows/code-verify.yml/badge.svg?branch=main)](https://github.com/nudgebee/application-profiler/actions/workflows/code-verify.yml)
+[![License](https://img.shields.io/github/license/nudgebee/application-profiler)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/nudgebee/application-profiler)](https://github.com/nudgebee/application-profiler/releases)
+
 Low-overhead, on-demand profiling agent for Kubernetes workloads. Generates
 flamegraphs, JFR recordings, heap dumps, thread dumps, and other profiling
 output for Java, Python, Go, Node.js, Ruby, Rust, C/C++ applications — without
