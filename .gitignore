@@ -17,7 +17,7 @@ coverage.out
 *.pem
 *.key
 *.kubeconfig
-credentials*
+credentials.*
 
 # Go
 vendor/
