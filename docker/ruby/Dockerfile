@@ -12,7 +12,7 @@ RUN git clone https://github.com/brendangregg/FlameGraph  \
 WORKDIR /rbspy
 RUN cargo build --release
 
-FROM bitnami/minideb:bullseye
+FROM bitnami/minideb:bookworm
 RUN apt-get update  \
     && apt-get install -y procps strace  \
     && apt-get clean \

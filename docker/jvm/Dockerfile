@@ -29,7 +29,7 @@ RUN apt-get update  \
     && tar -xf async-profiler-${ASYNCP_VERSION}-linux-${ARCHITECTURE}.tar.gz  \
     && mv async-profiler-${ASYNCP_VERSION}-linux-${ARCHITECTURE} async-profiler
 
-FROM bitnami/minideb:bullseye
+FROM bitnami/minideb:bookworm
 RUN apt-get update  \
     && apt-get install -y gzip procps strace sudo \
     && apt-get clean \

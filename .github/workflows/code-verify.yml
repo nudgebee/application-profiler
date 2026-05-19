@@ -20,5 +20,8 @@ jobs:
       - name: Build
         run: go build -v ./...
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Test
         run: GOARCH=amd64 GOOS=linux go test -p 1 ./... -coverprofile=coverage.out

@@ -104,7 +104,7 @@ Run `/app/agent --help` for the full flag list.
 
 ## Building from source
 
-Requires Go 1.23+, Docker with Buildx.
+Requires Go 1.26+, Docker with Buildx.
 
 ```bash
 make build-agent           # builds bin/agent for the host platform
@@ -120,7 +120,7 @@ REGISTRY=ghcr.io VERSION=v0.1.0 make push-docker-all
 
 ## Contributing
 
-See [Contributing.md](Contributing.md). Bug reports, feature requests, and PRs
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports, feature requests, and PRs
 are welcome. For security issues, please use
 [GitHub Security Advisories](../../security/advisories/new).
 

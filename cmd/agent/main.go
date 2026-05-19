@@ -66,7 +66,7 @@ func runApp() error {
 	app := &cli.App{
 		Name:        "agent",
 		UsageText:   "agent [global options]",
-		Usage:       "the agent profiler used by kubectl-prof",
+		Usage:       "the application-profiler agent for Kubernetes workloads",
 		Description: "An agent with capability for profiling containers inside pods",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
