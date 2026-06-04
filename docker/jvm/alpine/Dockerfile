@@ -1,6 +1,6 @@
 ARG JAVA_VERSION_TAG=21
 ARG ASYNCP_VERSION=2.9
-FROM golang:1.26.3-alpine AS agentbuild
+FROM golang:1.26.4-alpine AS agentbuild
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
