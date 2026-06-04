@@ -1,4 +1,4 @@
-FROM golang:1.26.3-bookworm AS agentbuild
+FROM golang:1.26.4-bookworm AS agentbuild
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
