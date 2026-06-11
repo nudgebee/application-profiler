@@ -31,7 +31,7 @@ RUN apk add --no-cache curl g++ git linux-headers make tar wget  \
          --compress=2 \
          --output /jcmd
 
-FROM alpine:3.23.4
+FROM alpine:3.24.0
 RUN mkdir -p /app/async-profiler/build  \
     && apk add --no-cache procps coreutils
 COPY --from=agentbuild /go/bin/agent /app
