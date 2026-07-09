@@ -13,8 +13,10 @@ FROM alpine:3.23.4
 # apk upgrade pulls the latest 3.23 patch level for the base + dependency
 # packages (libssl3/libcrypto3 3.5.6-r0 -> 3.5.7-r0, libexpat, libxml2), which
 # the pinned alpine:3.23.4 snapshot otherwise ships stale.
-RUN apk upgrade --no-cache \
-    && apk add --no-cache bash bcc-tools perl procps strace util-linux  iproute2 \
+RUN apk update \
+    && apk upgrade \
+    && apk add bash bcc-tools perl procps strace util-linux iproute2 \
+    && rm -rf /var/cache/apk/* \
     && mkdir -p /app/FlameGraph
 COPY --from=builder /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app
