@@ -1,4 +1,4 @@
-FROM golang:1.26.3-alpine AS agentbuild
+FROM golang:1.26.4-alpine AS agentbuild
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
@@ -10,7 +10,11 @@ RUN apk add --no-cache git  \
     && git clone https://github.com/brendangregg/FlameGraph
 
 FROM alpine:3.23.4
-RUN apk add --no-cache bash bcc-tools perl procps strace util-linux  iproute2 \
+# apk upgrade pulls the latest 3.23 patch level for the base + dependency
+# packages (libssl3/libcrypto3 3.5.6-r0 -> 3.5.7-r0, libexpat, libxml2), which
+# the pinned alpine:3.23.4 snapshot otherwise ships stale.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache bash bcc-tools perl procps strace util-linux  iproute2 \
     && mkdir -p /app/FlameGraph
 COPY --from=builder /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app
