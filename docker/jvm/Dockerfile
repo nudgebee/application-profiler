@@ -1,5 +1,6 @@
 ARG JAVA_VERSION_TAG=21
-FROM golang:1.26.3-bookworm AS agentbuild
+FROM golang:1.26.5-bookworm AS agentbuild
+ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
