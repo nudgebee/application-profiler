@@ -1,4 +1,4 @@
-FROM golang:1.26.5-alpine AS agentbuild
+FROM golang:1.26.6-alpine AS agentbuild
 ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
