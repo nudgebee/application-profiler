@@ -26,8 +26,13 @@ import (
 )
 
 const (
-	asyncProfilerDir              = "/tmp/async-profiler"
-	profilerSh                    = asyncProfilerDir + "/profiler.sh"
+	asyncProfilerDir = "/tmp/async-profiler"
+	profilerSh       = asyncProfilerDir + "/profiler.sh"
+	// profilerLib is the path profiler.sh hands to the target JVM to dlopen.
+	// The image ships the glibc build under this name and the musl build
+	// beside it; selectProfilerLibrary swaps them when the target is musl.
+	profilerLib                   = asyncProfilerDir + "/build/libasyncProfiler.so"
+	profilerLibMusl               = asyncProfilerDir + "/build/libasyncProfiler-musl.so"
 	asyncProfilerDelayBetweenJobs = 2 * time.Second
 )
 
@@ -57,6 +62,7 @@ type AsyncProfilerManager interface {
 	removeTmpDir() error
 	linkTmpDirToTargetTmpDir(string) error
 	copyProfilerToTmpDir() error
+	selectProfilerLibrary(string) error
 	invoke(*job.ProfilingJob, string) (error, time.Duration)
 	cleanUp(*job.ProfilingJob, string)
 }
@@ -108,7 +114,22 @@ func (j *AsyncProfiler) SetUp(job *job.ProfilingJob) error {
 		j.targetPIDs = pids
 	}
 
-	return j.copyProfilerToTmpDir()
+	if err := j.copyProfilerToTmpDir(); err != nil {
+		return err
+	}
+
+	return j.selectProfilerLibrary(targetFs)
+}
+
+// targetUsesMusl reports whether the target container's root filesystem is
+// musl-based (alpine and friends), by looking for the musl dynamic loader.
+func targetUsesMusl(targetFs string) bool {
+	for _, dir := range []string{"lib", "usr/lib"} {
+		if matches, _ := filepath.Glob(filepath.Join(targetFs, dir, "ld-musl-*.so.1")); len(matches) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (j *asyncProfilerManager) removeTmpDir() error {
@@ -121,6 +142,21 @@ func (j *asyncProfilerManager) linkTmpDirToTargetTmpDir(targetTmpDir string) err
 
 func (j *asyncProfilerManager) copyProfilerToTmpDir() error {
 	cmd := j.commander.Command("cp", "-r", "/app/async-profiler", common.TmpDir())
+	return cmd.Run()
+}
+
+// selectProfilerLibrary points libasyncProfiler.so at the build matching the
+// target's libc. The library is dlopen'd by the target JVM rather than by us,
+// so a mismatch fails the attach with "libc.musl-x86_64.so.1: cannot open
+// shared object file" — and the profile comes back empty with no clue why.
+// The image ships the glibc build under the default name, so only musl
+// targets need the swap.
+func (j *asyncProfilerManager) selectProfilerLibrary(targetFs string) error {
+	if !targetUsesMusl(targetFs) {
+		return nil
+	}
+	log.DebugLogLn("The target is musl-based; using the musl build of libasyncProfiler.so")
+	cmd := j.commander.Command("cp", "-f", profilerLibMusl, profilerLib)
 	return cmd.Run()
 }
 
