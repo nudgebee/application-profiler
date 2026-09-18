@@ -115,6 +115,19 @@ func (f *fakeAsyncProfilerManager) copyProfilerToTmpDir() error {
 	return err
 }
 
+func (f *fakeAsyncProfilerManager) selectProfilerLibrary(s string) error {
+	var err error
+	f.fakeMethods["selectProfilerLibrary"].invokes++
+	if f.fakeMethods["selectProfilerLibrary"].fakeReturnValues != nil && len(f.fakeMethods["selectProfilerLibrary"].fakeReturnValues) > 0 {
+		f.fakeMethods["selectProfilerLibrary"].indexExecution++
+		arg0 := f.fakeMethods["selectProfilerLibrary"].fakeReturnValues[f.fakeMethods["selectProfilerLibrary"].indexExecution-1].([]interface{})[0]
+		if arg0 != nil {
+			err = arg0.(error)
+		}
+	}
+	return err
+}
+
 func (f *fakeAsyncProfilerManager) cleanUp(profilingJob *job.ProfilingJob, s string) {
 	f.fakeMethods["cleanUp"].invokes++
 	if f.fakeMethods["cleanUp"].fakeReturnValues != nil && len(f.fakeMethods["cleanUp"].fakeReturnValues) > 0 {

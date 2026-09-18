@@ -42,6 +42,7 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager.On("removeTmpDir").Return(nil)
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
+				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -73,6 +74,7 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager.On("removeTmpDir").Return(nil)
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
+				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -105,6 +107,7 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager.On("removeTmpDir").Return(nil)
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
+				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -421,6 +424,75 @@ func Test_asyncProfilerManager_copyProfilerToTmpDir(t *testing.T) {
 	publisher := publish.NewFakePublisher()
 	a := NewAsyncProfiler(commander, publisher)
 	assert.Nil(t, a.copyProfilerToTmpDir())
+}
+
+// Test_targetUsesMusl — libasyncProfiler.so is dlopen'd by the target JVM, so
+// getting this wrong fails the attach with "libc.musl-x86_64.so.1: cannot open
+// shared object file" and the profile comes back empty.
+func Test_targetUsesMusl(t *testing.T) {
+	tests := []struct {
+		name   string
+		create string // file to create under the fake target rootfs
+		want   bool
+	}{
+		{name: "alpine target", create: "lib/ld-musl-x86_64.so.1", want: true},
+		{name: "alpine target on arm", create: "lib/ld-musl-aarch64.so.1", want: true},
+		{name: "musl loader under usr/lib", create: "usr/lib/ld-musl-x86_64.so.1", want: true},
+		{name: "glibc target", create: "lib/ld-linux-x86-64.so.2", want: false},
+		{name: "empty rootfs", create: "", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if tt.create != "" {
+				p := filepath.Join(root, tt.create)
+				require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+				_, err := os.Create(p)
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, targetUsesMusl(root))
+		})
+	}
+
+	// An unresolved root must not make the glob relative to our own working
+	// directory: this image is alpine, so that would report every target as
+	// musl-based.
+	t.Run("empty target root", func(t *testing.T) {
+		assert.False(t, targetUsesMusl(""))
+	})
+}
+
+// Test_asyncProfilerManager_selectProfilerLibrary — a glibc target must be
+// left alone (the shipped default is already glibc); only a musl target
+// triggers the copy that swaps the library.
+func Test_asyncProfilerManager_selectProfilerLibrary(t *testing.T) {
+	t.Run("glibc target does not copy", func(t *testing.T) {
+		commander := executil.NewFakeCommander()
+		commander.On("Command").Return(exec.Command("false"))
+		a := NewAsyncProfiler(commander, publish.NewFakePublisher())
+
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "lib"), 0o755))
+		_, err := os.Create(filepath.Join(root, "lib", "ld-linux-x86-64.so.2"))
+		require.NoError(t, err)
+
+		// `false` would error if it ran — a nil result proves it did not.
+		assert.Nil(t, a.selectProfilerLibrary(root))
+	})
+
+	t.Run("musl target copies the musl build over the default", func(t *testing.T) {
+		commander := executil.NewFakeCommander()
+		commander.On("Command").Return(exec.Command("true"))
+		a := NewAsyncProfiler(commander, publish.NewFakePublisher())
+
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "lib"), 0o755))
+		_, err := os.Create(filepath.Join(root, "lib", "ld-musl-x86_64.so.1"))
+		require.NoError(t, err)
+
+		assert.Nil(t, a.selectProfilerLibrary(root))
+		assert.Equal(t, 1, commander.On("Command").InvokedTimes())
+	})
 }
 
 func Test_asyncProfilerManager_invoke(t *testing.T) {
