@@ -210,8 +210,10 @@ func TestJcmdProfiler_SetUp(t *testing.T) {
 			},
 			then: func(t *testing.T, err error, fields fields) {
 				assert.NotNil(t, err)
-				assert.Equal(t, 1, fields.JcmdProfiler.JcmdManager.(FakeJcmdManager).On("removeTmpDir").InvokedTimes())
-				assert.Equal(t, 1, fields.JcmdProfiler.JcmdManager.(FakeJcmdManager).On("linkTmpDirToTargetTmpDir").InvokedTimes())
+				// PIDs are resolved first now — the target's /tmp is reached
+				// through one of them, so nothing is staged before that.
+				assert.Equal(t, 0, fields.JcmdProfiler.JcmdManager.(FakeJcmdManager).On("removeTmpDir").InvokedTimes())
+				assert.Equal(t, 0, fields.JcmdProfiler.JcmdManager.(FakeJcmdManager).On("linkTmpDirToTargetTmpDir").InvokedTimes())
 				assert.Equal(t, 0, fields.JcmdProfiler.JcmdManager.(FakeJcmdManager).On("copyJfrSettingsToTmpDir").InvokedTimes())
 			},
 		},

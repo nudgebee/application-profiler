@@ -45,10 +45,16 @@ func NewNodeDummyProfiler(publisher publish.Publisher) *NodeDummyProfiler {
 }
 
 func (n *NodeDummyProfiler) SetUp(job *job.ProfilingJob) error {
-	targetFs, err := util.ContainerFileSystem(job.ContainerRuntime, job.ContainerID, job.ContainerRuntimePath)
+	rootPID, err := util.GetRootPID(job)
 	if err != nil {
 		return err
 	}
+
+	// The heapsnapshot is written by the Node process into its working
+	// directory, so we have to read it back from the target's own mount
+	// namespace — the runtime's overlay path misses it whenever that
+	// directory is a volume.
+	targetFs := util.TargetRootFS(rootPID)
 	log.DebugLogLn(fmt.Sprintf("The target filesystem is: %s", targetFs))
 
 	cwd, err := util.GetCWD(job)

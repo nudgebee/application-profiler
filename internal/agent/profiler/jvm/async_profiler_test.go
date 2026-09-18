@@ -43,6 +43,7 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
 				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
+				asyncProfilerManager.On("chownProfilerToTarget").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -75,6 +76,7 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
 				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
+				asyncProfilerManager.On("chownProfilerToTarget").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -101,13 +103,14 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 			},
 		},
 		{
-			name: "should fail when getting target filesystem fail",
+			name: "should fail when the container runtime is unknown",
 			given: func() (fields, args) {
 				asyncProfilerManager := newFakeAsyncProfilerManager()
 				asyncProfilerManager.On("removeTmpDir").Return(nil)
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
 				asyncProfilerManager.On("copyProfilerToTmpDir").Return(nil)
 				asyncProfilerManager.On("selectProfilerLibrary").Return(nil)
+				asyncProfilerManager.On("chownProfilerToTarget").Return(nil)
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -118,7 +121,6 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 							Duration:         0,
 							ContainerRuntime: "other",
 							ContainerID:      "ContainerID",
-							PID:              "PID_ContainerID",
 						},
 					}
 			},
@@ -197,6 +199,8 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 				asyncProfilerManager := newFakeAsyncProfilerManager()
 				asyncProfilerManager.On("removeTmpDir").Return(nil)
 				asyncProfilerManager.On("linkTmpDirToTargetTmpDir").Return(nil)
+				// PIDs are resolved first now — the target's mount namespace is
+				// reached through one of them, so nothing can be staged before.
 
 				return fields{
 						AsyncProfiler: &AsyncProfiler{
@@ -215,8 +219,8 @@ func TestAsyncProfiler_SetUp(t *testing.T) {
 			},
 			then: func(t *testing.T, err error, fields fields) {
 				assert.NotNil(t, err)
-				assert.Equal(t, 1, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("removeTmpDir").InvokedTimes())
-				assert.Equal(t, 1, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("linkTmpDirToTargetTmpDir").InvokedTimes())
+				assert.Equal(t, 0, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("removeTmpDir").InvokedTimes())
+				assert.Equal(t, 0, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("linkTmpDirToTargetTmpDir").InvokedTimes())
 				assert.Equal(t, 0, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("copyProfilerToTmpDir").InvokedTimes())
 			},
 		},
@@ -493,6 +497,54 @@ func Test_asyncProfilerManager_selectProfilerLibrary(t *testing.T) {
 		assert.Nil(t, a.selectProfilerLibrary(root))
 		assert.Equal(t, 1, commander.On("Command").InvokedTimes())
 	})
+}
+
+// Test_asyncProfilerManager_chownProfilerToTarget — we stage as root, but the
+// JVM reads the library and writes its own output into that directory as
+// whatever user it runs as, which in hardened images is not root.
+func Test_asyncProfilerManager_chownProfilerToTarget(t *testing.T) {
+	t.Run("a root target needs no chown", func(t *testing.T) {
+		requireProcFS(t)
+		if os.Getuid() != 0 {
+			t.Skip("this test reads our own /proc entry, so it only says root when we are")
+		}
+		commander := executil.NewFakeCommander()
+		commander.On("Command").Return(exec.Command("false"))
+		a := NewAsyncProfiler(commander, publish.NewFakePublisher())
+
+		assert.Nil(t, a.chownProfilerToTarget("self"))
+		assert.Equal(t, 0, commander.On("Command").InvokedTimes())
+	})
+
+	t.Run("a non-root target is handed the staged directory", func(t *testing.T) {
+		requireProcFS(t)
+		if os.Getuid() == 0 {
+			t.Skip("running as root, so our own /proc entry cannot stand in for a non-root target")
+		}
+		commander := executil.NewFakeCommander()
+		commander.On("Command").Return(exec.Command("true"))
+		a := NewAsyncProfiler(commander, publish.NewFakePublisher())
+
+		assert.Nil(t, a.chownProfilerToTarget("self"))
+		assert.Equal(t, 1, commander.On("Command").InvokedTimes())
+	})
+
+	t.Run("an unreadable pid is an error, not a silent skip", func(t *testing.T) {
+		commander := executil.NewFakeCommander()
+		commander.On("Command").Return(exec.Command("true"))
+		a := NewAsyncProfiler(commander, publish.NewFakePublisher())
+
+		assert.NotNil(t, a.chownProfilerToTarget("not-a-pid"))
+	})
+}
+
+// requireProcFS skips on platforms without /proc — the credentials come from
+// /proc/<pid>/status, which only exists on the Linux boxes this runs on.
+func requireProcFS(t *testing.T) {
+	t.Helper()
+	if _, err := os.Stat("/proc/self/status"); err != nil {
+		t.Skip("no procfs on this platform")
+	}
 }
 
 func Test_asyncProfilerManager_invoke(t *testing.T) {

@@ -96,26 +96,8 @@ func NewJcmdProfiler(commander executil.Commander, publisher publish.Publisher) 
 }
 
 func (j *JcmdProfiler) SetUp(job *job.ProfilingJob) error {
-	targetFs, err := util.ContainerFileSystem(job.ContainerRuntime, job.ContainerID, job.ContainerRuntimePath)
-	if err != nil {
-		return err
-	}
-	log.DebugLogLn(fmt.Sprintf("The target filesystem is: %s", targetFs))
-
-	err = j.removeTmpDir()
-	if err != nil {
-		return err
-	}
-
-	targetTmpDir := filepath.Join(targetFs, "tmp")
-	// remove previous files from a previous profiling
-	file.RemoveAll(targetTmpDir, config.ProfilingPrefix+string(job.OutputType))
-
-	err = j.linkTmpDirToTargetTmpDir(targetTmpDir)
-	if err != nil {
-		return err
-	}
-
+	// PIDs first: the tmp dir below is the target's own, reachable only
+	// through one of its PIDs.
 	if stringUtils.IsNotBlank(job.PID) {
 		j.targetPIDs = []string{job.PID}
 		recordingPIDs = make(chan string, 1)
@@ -127,6 +109,24 @@ func (j *JcmdProfiler) SetUp(job *job.ProfilingJob) error {
 		log.DebugLogLn(fmt.Sprintf("The PIDs to be profiled: %s", pids))
 		j.targetPIDs = pids
 		recordingPIDs = make(chan string, len(pids))
+	}
+
+	// The JVM writes heap dumps and JFR recordings itself, to a path in its own
+	// mount namespace — so we have to agree with it on what /tmp is. Every PID
+	// of a container shares that namespace.
+	targetFs := util.TargetRootFS(j.targetPIDs[0])
+	log.DebugLogLn(fmt.Sprintf("The target filesystem is: %s", targetFs))
+
+	if err := j.removeTmpDir(); err != nil {
+		return err
+	}
+
+	targetTmpDir := filepath.Join(targetFs, "tmp")
+	// remove previous files from a previous profiling
+	file.RemoveAll(targetTmpDir, config.ProfilingPrefix+string(job.OutputType))
+
+	if err := j.linkTmpDirToTargetTmpDir(targetTmpDir); err != nil {
+		return err
 	}
 
 	return j.copyJfrSettingsToTmpDir()

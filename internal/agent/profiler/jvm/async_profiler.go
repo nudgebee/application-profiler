@@ -63,6 +63,7 @@ type AsyncProfilerManager interface {
 	linkTmpDirToTargetTmpDir(string) error
 	copyProfilerToTmpDir() error
 	selectProfilerLibrary(string) error
+	chownProfilerToTarget(string) error
 	invoke(*job.ProfilingJob, string) (error, time.Duration)
 	cleanUp(*job.ProfilingJob, string)
 }
@@ -83,26 +84,8 @@ func NewAsyncProfiler(commander executil.Commander, publisher publish.Publisher)
 }
 
 func (j *AsyncProfiler) SetUp(job *job.ProfilingJob) error {
-	targetFs, err := util.ContainerFileSystem(job.ContainerRuntime, job.ContainerID, job.ContainerRuntimePath)
-	if err != nil {
-		return err
-	}
-	log.DebugLogLn(fmt.Sprintf("The target filesystem is: %s", targetFs))
-
-	err = j.removeTmpDir()
-	if err != nil {
-		return err
-	}
-
-	targetTmpDir := filepath.Join(targetFs, "tmp")
-	// remove previous files from a previous profiling
-	file.RemoveAll(targetTmpDir, config.ProfilingPrefix+string(job.OutputType))
-
-	err = j.linkTmpDirToTargetTmpDir(targetTmpDir)
-	if err != nil {
-		return err
-	}
-
+	// PIDs first: everything below is staged through the target's own mount
+	// namespace, which we can only reach via one of its PIDs.
 	if stringUtils.IsNotBlank(job.PID) {
 		j.targetPIDs = []string{job.PID}
 	} else {
@@ -114,11 +97,34 @@ func (j *AsyncProfiler) SetUp(job *job.ProfilingJob) error {
 		j.targetPIDs = pids
 	}
 
+	// Every PID of a container shares its mount namespace, so any of them
+	// resolves the same filesystem.
+	targetFs := util.TargetRootFS(j.targetPIDs[0])
+	log.DebugLogLn(fmt.Sprintf("The target filesystem is: %s", targetFs))
+
+	if err := j.removeTmpDir(); err != nil {
+		return err
+	}
+
+	targetTmpDir := filepath.Join(targetFs, "tmp")
+	// remove previous files from a previous profiling
+	file.RemoveAll(targetTmpDir, config.ProfilingPrefix+string(job.OutputType))
+
+	if err := j.linkTmpDirToTargetTmpDir(targetTmpDir); err != nil {
+		return err
+	}
+
 	if err := j.copyProfilerToTmpDir(); err != nil {
 		return err
 	}
 
-	return j.selectProfilerLibrary(targetFs)
+	if err := j.selectProfilerLibrary(targetFs); err != nil {
+		return err
+	}
+
+	// The JVM dlopens the library and writes the profile itself, as whatever
+	// user it runs as — root-owned staging is unreadable/unwritable for it.
+	return j.chownProfilerToTarget(j.targetPIDs[0])
 }
 
 // targetUsesMusl reports whether the target container's root filesystem is
@@ -148,6 +154,23 @@ func (j *asyncProfilerManager) linkTmpDirToTargetTmpDir(targetTmpDir string) err
 
 func (j *asyncProfilerManager) copyProfilerToTmpDir() error {
 	cmd := j.commander.Command("cp", "-r", "/app/async-profiler", common.TmpDir())
+	return cmd.Run()
+}
+
+// chownProfilerToTarget hands the staged directory to the user the target runs
+// as. We stage as root; the JVM then has to read libasyncProfiler.so and write
+// its own output file into that directory, and most hardened images do not run
+// as root.
+func (j *asyncProfilerManager) chownProfilerToTarget(pid string) error {
+	uid, gid, err := util.TargetCredentials(pid)
+	if err != nil {
+		return err
+	}
+	if uid == "0" && gid == "0" {
+		return nil
+	}
+	log.DebugLogLn(fmt.Sprintf("Handing the staged profiler to %s:%s", uid, gid))
+	cmd := j.commander.Command("chown", "-R", uid+":"+gid, asyncProfilerDir)
 	return cmd.Run()
 }
 
