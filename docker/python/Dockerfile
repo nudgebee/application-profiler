@@ -23,7 +23,11 @@ COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 COPY --from=pyspybuild /usr/local/bin/py-spy /app/py-spy
 COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/get-ps-command.sh /app/get-ps-command.sh
-RUN pip3 install austin-dist==3.7.0
+# austin 4 is the first release that can read CPython 3.14; on 3.7.0 a 3.14
+# target is reported as "not a Python process". It only writes the binary MOJO
+# format, so austin-python comes along for mojo2austin, which converts it back
+# to the text format the raw artefact and flamegraph.pl are built around.
+RUN pip3 install austin-dist==4.0.0 austin-python==1.7.1
 RUN chmod +x /app/get-ps-command.sh
 
 CMD [ "/app/agent" ]

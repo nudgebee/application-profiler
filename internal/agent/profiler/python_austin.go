@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"time"
@@ -25,7 +27,19 @@ import (
 
 const (
 	austinLocation = "austin"
+	// mojo2austinLocation converts austin's binary MOJO output back to the
+	// line-per-sample text format. austin 4 dropped the text writer, and the
+	// text format is what the raw artefact and flamegraph.pl both consume.
+	mojo2austinLocation = "mojo2austin"
+	// austinInterruptedExitCode is what austin returns when sampling ends on
+	// a signal — `retval = -interrupt_signal` in its main(), so SIGINT (2)
+	// surfaces as 254. It ends every exposure-limited (-x) run, including the
+	// successful ones, so it can't be treated as a failure on its own.
+	austinInterruptedExitCode = 254
 )
+
+// mojoMagic prefixes austin's binary output format.
+var mojoMagic = []byte{'M', 'O', 'J', 3}
 
 var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string) *exec.Cmd {
 	interval := strconv.Itoa(int(job.Interval.Seconds()))
@@ -114,9 +128,22 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	if err != nil {
+	if err != nil && !austinStoppedOnSignal(err) {
 		log.ErrorLogLn(out.String())
 		return errors.Wrapf(err, "could not launch profiler: %s", stderr.String()), time.Since(start)
+	}
+
+	// austin 4 always writes the binary MOJO format; convert it back to the
+	// text format the raw artefact and flamegraph.pl are built around.
+	if err := p.convertMojo(fileName); err != nil {
+		return errors.Wrap(err, "could not convert the profile to text"), time.Since(start)
+	}
+
+	// austin writes its samples to the -o file, so an empty one means it
+	// attached but read nothing — report that instead of publishing a
+	// zero-byte artefact as a success.
+	if file.IsEmpty(fileName) {
+		return errors.Errorf("no samples collected (PID: %s): %s", pid, stderr.String()), time.Since(start)
 	}
 
 	// result file name is composed by the job info and the pid
@@ -127,11 +154,42 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 			log.ErrorLogLn(fmt.Sprintf("could not generate flamegraph (PID: %s): %s", pid, err.Error()))
 			return nil, time.Since(start)
 		}
-	} else {
-		file.Write(resultFileName, out.String())
 	}
+	// Nothing to do for the other output types: austin has already written
+	// the samples to resultFileName (fileName == resultFileName there).
+	// Copying cmd stdout over it, as this used to, truncated every non-
+	// flamegraph profile to zero bytes — austin prints nothing on stdout
+	// when -o is given.
 
 	return p.publisher.Do(job.Compressor, resultFileName, job.OutputType), time.Since(start)
+}
+
+// austinStoppedOnSignal reports whether austin exited the way an
+// exposure-limited (-x) run always does: sampling ends on a signal and
+// austin returns -SIGINT. The samples are already on disk at that point.
+func austinStoppedOnSignal(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == austinInterruptedExitCode
+}
+
+// convertMojo rewrites fileName in place when it holds austin's binary MOJO
+// output. A no-op for the text format, so it is safe across austin versions.
+func (p *austinPythonManager) convertMojo(fileName string) error {
+	f, err := os.Open(fileName) //nolint:gosec // path built by us from TmpDir
+	if err != nil {
+		return err
+	}
+	header := make([]byte, len(mojoMagic))
+	n, _ := io.ReadFull(f, header)
+	_ = f.Close()
+	if !bytes.Equal(header[:n], mojoMagic) {
+		return nil
+	}
+	textFileName := fileName + ".txt"
+	if err := p.commander.Command(mojo2austinLocation, fileName, textFileName).Run(); err != nil {
+		return err
+	}
+	return os.Rename(textFileName, fileName)
 }
 
 func (p *austinPythonManager) handleFlamegraph(job *job.ProfilingJob, flameGrapher flamegraph.FrameGrapher,
