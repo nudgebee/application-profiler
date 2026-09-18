@@ -124,6 +124,12 @@ func (j *AsyncProfiler) SetUp(job *job.ProfilingJob) error {
 // targetUsesMusl reports whether the target container's root filesystem is
 // musl-based (alpine and friends), by looking for the musl dynamic loader.
 func targetUsesMusl(targetFs string) bool {
+	// An empty root would make the patterns below relative to our own
+	// working directory — and this image is alpine, so every target would
+	// look musl-based. Treat "unknown" as the shipped default (glibc).
+	if targetFs == "" {
+		return false
+	}
 	for _, dir := range []string{"lib", "usr/lib"} {
 		if matches, _ := filepath.Glob(filepath.Join(targetFs, dir, "ld-musl-*.so.1")); len(matches) > 0 {
 			return true

@@ -453,6 +453,13 @@ func Test_targetUsesMusl(t *testing.T) {
 			assert.Equal(t, tt.want, targetUsesMusl(root))
 		})
 	}
+
+	// An unresolved root must not make the glob relative to our own working
+	// directory: this image is alpine, so that would report every target as
+	// musl-based.
+	t.Run("empty target root", func(t *testing.T) {
+		assert.False(t, targetUsesMusl(""))
+	})
 }
 
 // Test_asyncProfilerManager_selectProfilerLibrary — a glibc target must be
