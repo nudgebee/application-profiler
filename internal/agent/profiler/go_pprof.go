@@ -82,10 +82,17 @@ func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileName string) error {
 	var out bytes.Buffer
 	var stderr bytes.Buffer
-	targetURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
-		port, "heap", int(job.Interval.Seconds()),
-	)
+	// A heap profile is a snapshot of what the process is holding right now, so
+	// it takes no duration. Passing ?seconds= makes Go return a DELTA over that
+	// window instead — it samples, waits, samples again and subtracts — which
+	// nets to nothing whenever the heap is steady. That is how a 30s "heap
+	// profile" of a healthy service arrives as `Total samples = 0` with an
+	// empty flamegraph.
+	//
+	// ?gc=1 runs a collection first so the snapshot describes live memory
+	// rather than whatever the last GC cycle happened to leave behind; without
+	// it a process that has not GC'd yet reports nothing at all.
+	targetURL := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/heap?gc=1", port)
 	// for local testing
 	// cmd := exec.Command(
 	// 	"curl", targetURL, "-o", fileName,
