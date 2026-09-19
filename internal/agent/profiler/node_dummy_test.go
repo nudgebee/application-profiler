@@ -53,11 +53,13 @@ func TestNodeDummyProfiler_SetUp(t *testing.T) {
 			},
 			then: func(t *testing.T, err error, fields fields) {
 				assert.Nil(t, err)
-				assert.Equal(t, "/root/fs/ContainerID/cwd", fields.NodeDummyProfiler.cwd)
+				// The heapsnapshot is read back through the target's own mount
+				// namespace, not the runtime's overlay directory.
+				assert.Equal(t, "/proc/PID_ContainerID/root/cwd", fields.NodeDummyProfiler.cwd)
 			},
 		},
 		{
-			name: "should fail when get root file system fail",
+			name: "should fail when the container PID is not found",
 			given: func() (fields, args) {
 				return fields{
 						NodeDummyProfiler: &NodeDummyProfiler{
@@ -66,7 +68,7 @@ func TestNodeDummyProfiler_SetUp(t *testing.T) {
 					}, args{
 						job: &job.ProfilingJob{
 							Duration:         0,
-							ContainerRuntime: api.FakeContainerWithRootFileSystemLocationResultError,
+							ContainerRuntime: api.FakeContainerWithPIDResultError,
 							ContainerID:      "ContainerID",
 						},
 					}

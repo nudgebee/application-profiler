@@ -3,6 +3,8 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -60,7 +62,55 @@ var runtime = func(r api.ContainerRuntime) (Container, error) {
 
 var commander = exec.NewCommander()
 
-// ContainerFileSystem returns the root path of the container filesystem
+// TargetRootFS returns the path through which we can reach the target's
+// filesystem *as the target itself sees it*: /proc/<pid>/root resolves the
+// process's whole mount namespace, volumes included.
+//
+// Prefer this over ContainerFileSystem for anything the target has to read or
+// write. The two agree only when nothing is mounted over the container's root;
+// a pod with readOnlyRootFilesystem: true and an emptyDir at /tmp is the common
+// counter-example, and there a file written through the runtime's overlay
+// directory never becomes visible inside the container.
+func TargetRootFS(pid string) string {
+	return filepath.Join("/proc", pid, "root")
+}
+
+// TargetCredentials returns the uid and gid the target process runs as, from
+// /proc/<pid>/status. Files we stage for it to read — and the directory it
+// writes its own output into — have to belong to it: the debugger pod is root,
+// the target frequently is not.
+func TargetCredentials(pid string) (uid string, gid string, err error) {
+	status, err := os.ReadFile(filepath.Join("/proc", pid, "status")) //nolint:gosec // pid comes from the container runtime
+	if err != nil {
+		return "", "", err
+	}
+	for _, line := range strings.Split(string(status), "\n") {
+		// "Uid:\t<real>\t<effective>\t<saved>\t<fs>" — the real id is the one
+		// the process runs as, which is what file ownership has to match.
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "Uid:":
+			uid = fields[1]
+		case "Gid:":
+			gid = fields[1]
+		}
+	}
+	if uid == "" || gid == "" {
+		return "", "", errors.Errorf("could not read uid/gid of PID %s from /proc", pid)
+	}
+	return uid, gid, nil
+}
+
+// ContainerFileSystem returns the container runtime's own root path for the
+// container — the overlay directory.
+//
+// NOTE: this is NOT what the container sees. Any path mounted over
+// (an emptyDir at /tmp, a PVC, a projected secret) resolves differently inside
+// the container's mount namespace, so reads and writes through here are
+// invisible to the process. Use TargetRootFS for anything the target touches.
 func ContainerFileSystem(r api.ContainerRuntime, containerID string, containerRuntimePath string) (string, error) {
 	if r == "" || containerID == "" {
 		return "", errors.New(ContainerRuntimeAndContainerIdMandatoryText)

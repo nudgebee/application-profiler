@@ -128,6 +128,19 @@ func (f *fakeAsyncProfilerManager) selectProfilerLibrary(s string) error {
 	return err
 }
 
+func (f *fakeAsyncProfilerManager) chownProfilerToTarget(s string) error {
+	var err error
+	f.fakeMethods["chownProfilerToTarget"].invokes++
+	if f.fakeMethods["chownProfilerToTarget"].fakeReturnValues != nil && len(f.fakeMethods["chownProfilerToTarget"].fakeReturnValues) > 0 {
+		f.fakeMethods["chownProfilerToTarget"].indexExecution++
+		arg0 := f.fakeMethods["chownProfilerToTarget"].fakeReturnValues[f.fakeMethods["chownProfilerToTarget"].indexExecution-1].([]interface{})[0]
+		if arg0 != nil {
+			err = arg0.(error)
+		}
+	}
+	return err
+}
+
 func (f *fakeAsyncProfilerManager) cleanUp(profilingJob *job.ProfilingJob, s string) {
 	f.fakeMethods["cleanUp"].invokes++
 	if f.fakeMethods["cleanUp"].fakeReturnValues != nil && len(f.fakeMethods["cleanUp"].fakeReturnValues) > 0 {
