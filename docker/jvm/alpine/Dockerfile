@@ -12,7 +12,7 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 # helper with a hardcoded `-source 7 -target 7`, which javac rejects from JDK 20
 # onwards ("Source option 7 is no longer supported"). On JDK 26 that killed the
 # very first make target, leaving build/ empty.
-FROM amazoncorretto:17-alpine-jdk AS async-profiler-builder
+FROM amazoncorretto:27-alpine-jdk AS async-profiler-builder
 ARG TARGETPLATFORM
 ARG ASYNCP_VERSION=2.9
 RUN apk add --no-cache curl g++ git linux-headers make musl-dev tar wget
@@ -35,7 +35,7 @@ RUN make CXXFLAGS='-O3 -fno-omit-frame-pointer -fvisibility=hidden -D_LARGEFILE6
 # fails the attach with "libc.musl-x86_64.so.1: cannot open shared object
 # file". jattach and fdtransfer stay musl — those run here, in this alpine
 # image. Same JDK 17 pin, same reason as above.
-FROM amazoncorretto:17 AS async-profiler-builder-glibc
+FROM amazoncorretto:27 AS async-profiler-builder-glibc
 ARG TARGETPLATFORM
 ARG ASYNCP_VERSION=2.9
 RUN yum install -y gcc-c++ git make tar
