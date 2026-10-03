@@ -3,7 +3,6 @@ package profiler
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/alitto/pond"
 	"github.com/nudgebee/application-profiler/api"
 	"github.com/nudgebee/application-profiler/internal/agent/config"
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -24,10 +22,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+const goPprofDelayBetweenJobs = 2 * time.Second
+
 // GoPprofProfiler uses Go's pprof HTTP server to collect profiles.
 type GoPprofProfiler struct {
 	manager    *goPprofManager
 	targetPIDs []string
+	delay      time.Duration
 }
 
 type goPprofManager struct {
@@ -37,7 +38,10 @@ type goPprofManager struct {
 
 // NewGoPprofProfiler creates a new profiler with the given publisher.
 func NewGoPprofProfiler(commander executil.Commander, publisher publish.Publisher) *GoPprofProfiler {
-	return &GoPprofProfiler{manager: &goPprofManager{commander: commander, publisher: publisher}}
+	return &GoPprofProfiler{
+		manager: &goPprofManager{commander: commander, publisher: publisher},
+		delay:   goPprofDelayBetweenJobs,
+	}
 }
 
 // SetUp ensures the job has a valid PID.
@@ -59,26 +63,17 @@ func (p *GoPprofProfiler) SetUp(job *job.ProfilingJob) error {
 // Invoke runs the profiling job and returns execution time.
 func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-	pool := pond.New(len(p.targetPIDs), 0, pond.MinWorkers(len(p.targetPIDs)))
-	defer pool.StopAndWait()
-	// create a task group associated to a context
-	group, _ := pool.GroupContext(context.Background())
-	// submit tasks to profile
-	for _, pid := range p.targetPIDs {
-		pid := pid
-		group.Submit(func() error {
-			job.PID = pid
-			err := p.manager.fetchProfileFromPID(job)
-			return err
-		})
-		// wait a bit between jobs for not overloading the system
-		time.Sleep(2 * time.Second)
-	}
-	// wait for all tasks to finish
-	err := group.Wait()
-
+	err := common.ProfilePIDs(p.targetPIDs, p.delay, func(pid string) error {
+		// The PIDs run concurrently, so each needs its own copy of the job:
+		// setting PID on the shared one let a later PID's value leak into an
+		// earlier PID's scrape.
+		pidJob := *job
+		pidJob.PID = pid
+		return p.manager.fetchProfileFromPID(&pidJob)
+	})
 	return err, time.Since(start)
 }
+
 func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileName string) error {
 	var out bytes.Buffer
 	var stderr bytes.Buffer

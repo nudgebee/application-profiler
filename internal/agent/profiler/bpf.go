@@ -2,14 +2,12 @@ package profiler
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/alitto/pond"
 	"github.com/nudgebee/application-profiler/api"
 	"github.com/nudgebee/application-profiler/internal/agent/config"
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -77,27 +75,10 @@ func (b *BpfProfiler) SetUp(job *job.ProfilingJob) error {
 
 func (b *BpfProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-
-	pool := pond.New(len(b.targetPIDs), 0, pond.MinWorkers(len(b.targetPIDs)))
-	defer pool.StopAndWait()
-
-	// create a task group associated to a context
-	group, _ := pool.GroupContext(context.Background())
-
-	// submit tasks to profile
-	for _, pid := range b.targetPIDs {
-		pid := pid
-		group.Submit(func() error {
-			err, _ := b.invoke(job, pid)
-			return err
-		})
-		// wait a bit between jobs for not overloading the system
-		time.Sleep(b.delay)
-	}
-
-	// wait for all tasks to finish
-	err := group.Wait()
-
+	err := common.ProfilePIDs(b.targetPIDs, b.delay, func(pid string) error {
+		err, _ := b.invoke(job, pid)
+		return err
+	})
 	return err, time.Since(start)
 }
 

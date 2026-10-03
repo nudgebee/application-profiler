@@ -1,6 +1,7 @@
 package jvm
 
 import (
+	"sync"
 	"time"
 
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -16,6 +17,8 @@ type FakeAsyncProfilerManager interface {
 
 // fakeAsyncProfilerManager is an implementation of the FakeAsyncProfilerManager interface
 type fakeAsyncProfilerManager struct {
+	// mu serialises invoke, which Invoke calls concurrently, once per PID.
+	mu          sync.Mutex
 	fakeMethods map[string]*fakeAsyncProfilerManagerMethod
 }
 
@@ -59,6 +62,8 @@ func (f *fakeAsyncProfilerManagerMethod) InvokedTimes() int {
 }
 
 func (f *fakeAsyncProfilerManager) invoke(*job.ProfilingJob, string) (error, time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var err error
 	var duration time.Duration
 	f.fakeMethods["invoke"].invokes++

@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	github.com/agrison/go-commons-lang v0.0.0-20240106075236-2e001e6401ef
-	github.com/alitto/pond v1.9.2
 	github.com/golang/snappy v1.0.0
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.18.6
