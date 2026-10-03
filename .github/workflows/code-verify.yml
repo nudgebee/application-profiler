@@ -61,3 +61,18 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
+
+  # Unit tests fake the austin command, so they can't catch austin failing to
+  # read a real interpreter — which every Python memory profile did for any
+  # target whose interpreter path the profiler image lacked. Profile real
+  # Python containers with the freshly built image instead.
+  python-austin-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the python profiler image
+        run: docker build -f docker/python/Dockerfile -t application-profiler-python:e2e .
+
+      - name: Profile real Python targets
+        run: test/e2e/python-austin.sh application-profiler-python:e2e

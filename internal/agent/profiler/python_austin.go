@@ -1,14 +1,19 @@
 package profiler
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
 	"github.com/alitto/pond"
@@ -36,16 +41,98 @@ const (
 	// surfaces as 254. It ends every exposure-limited (-x) run, including the
 	// successful ones, so it can't be treated as a failure on its own.
 	austinInterruptedExitCode = 254
+	unshareLocation           = "unshare"
 )
+
+// austinInTargetFSScript runs austin with the target's interpreter files
+// mounted at the paths austin will look for them.
+//
+// austin finds the interpreter (and libpython, for a shared build) by the
+// path it reads from /proc/<pid>/maps, then opens that path in its OWN mount
+// namespace — not under /proc/<pid>/root. In this container that path is
+// either missing (a target on any other Python than ours fails with "Cannot
+// determine the version of the Python interpreter") or, worse, our own
+// interpreter (a python:3.14 target would be read through our python3.14).
+//
+// The bind can't come straight from /proc/<pid>/root: the kernel refuses a
+// bind whose source lives in another mount namespace (EINVAL). So each file
+// is copied out through /proc/<pid>/root first and the copy is bound, inside
+// a private mount namespace so neither the mounts nor the shadowing of our
+// own python leak into the rest of the agent (mojo2austin runs on it).
+//
+// Positional args: <pid> <n> <file 1> ... <file n> <austin args...>.
+const austinInTargetFSScript = `set -e
+pid=$1; n=$2; shift 2
+i=0
+while [ "$i" -lt "$n" ]; do
+	p=$1; shift
+	c="/tmp/austin-target-$pid$p"
+	mkdir -p "$(dirname "$c")" "$(dirname "$p")"
+	cp "/proc/$pid/root$p" "$c"
+	[ -e "$p" ] || touch "$p"
+	mount --bind "$c" "$p"
+	i=$((i+1))
+done
+exec ` + austinLocation + ` "$@"`
 
 // mojoMagic prefixes austin's binary output format.
 var mojoMagic = []byte{'M', 'O', 'J', 3}
 
-var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string) *exec.Cmd {
+// procDir is where the target's /proc entries are read from; a var so tests
+// can point it at a fake tree.
+var procDir = "/proc"
+
+var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string, targetFiles []string) *exec.Cmd {
 	interval := strconv.Itoa(int(job.Interval.Seconds()))
-	args := []string{}
-	args = append(args, "-p", pid, "-o", fileName, "-x", interval, "-m")
-	return commander.Command(austinLocation, args...)
+	austinArgs := []string{"-p", pid, "-o", fileName, "-x", interval, "-m"}
+	if len(targetFiles) == 0 {
+		return commander.Command(austinLocation, austinArgs...)
+	}
+	args := []string{"-m", "--propagation", "private", "sh", "-c", austinInTargetFSScript, "sh", pid, strconv.Itoa(len(targetFiles))}
+	args = append(args, targetFiles...)
+	args = append(args, austinArgs...)
+	return commander.Command(unshareLocation, args...)
+}
+
+// austinTargetFiles returns the files austin opens by the path it finds in
+// /proc/<pid>/maps: the interpreter binary and, for a shared build,
+// libpython. Only files reachable through /proc/<pid>/root are returned, so
+// the caller can mount every one of them.
+func austinTargetFiles(pid string) ([]string, error) {
+	exe, err := os.Readlink(filepath.Join(procDir, pid, "exe"))
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not resolve the interpreter of PID %s", pid)
+	}
+	candidates := []string{strings.TrimSuffix(exe, " (deleted)")}
+
+	maps, err := os.ReadFile(filepath.Join(procDir, pid, "maps")) //nolint:gosec // path built from procDir and a numeric PID
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read the memory map of PID %s", pid)
+	}
+	for _, line := range strings.Split(string(maps), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+		path := strings.Join(fields[5:], " ")
+		if strings.HasPrefix(filepath.Base(path), "libpython") {
+			candidates = append(candidates, path)
+		}
+	}
+
+	var files []string
+	seen := map[string]bool{}
+	for _, f := range candidates {
+		if seen[f] || !filepath.IsAbs(f) {
+			continue
+		}
+		seen[f] = true
+		if _, err := os.Stat(filepath.Join(procDir, pid, "root", f)); err != nil {
+			continue
+		}
+		files = append(files, f)
+	}
+	return files, nil
 }
 
 type AustinPythonProfiler struct {
@@ -124,13 +211,24 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 	if job.OutputType == api.FlameGraph {
 		fileName = common.GetResultFile(common.TmpDir(), job.Tool, api.Raw, pid, job.Iteration)
 	}
-	cmd := austinPythonCommand(p.commander, job, pid, fileName)
+	// Without the target's interpreter files austin can only ever fail, but
+	// still run it: its own error says more than ours would.
+	targetFiles, err := austinTargetFiles(pid)
+	if err != nil {
+		log.DebugLogLn(err.Error())
+	}
+	binary := "unknown binary"
+	if len(targetFiles) > 0 {
+		binary = targetFiles[0]
+	}
+	cmd := austinPythonCommand(p.commander, job, pid, fileName, targetFiles)
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil && !austinStoppedOnSignal(err) {
 		log.ErrorLogLn(out.String())
-		return errors.Wrapf(err, "could not launch profiler: %s", stderr.String()), time.Since(start)
+		return errors.Errorf("could not launch profiler: austin (PID %s, %s): %s (%s)",
+			pid, binary, austinErrorMessage(stderr.String()), err), time.Since(start)
 	}
 
 	// austin 4 always writes the binary MOJO format; convert it back to the
@@ -143,7 +241,28 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 	// attached but read nothing — report that instead of publishing a
 	// zero-byte artefact as a success.
 	if file.IsEmpty(fileName) {
-		return errors.Errorf("no samples collected (PID: %s): %s", pid, stderr.String()), time.Since(start)
+		return errors.Errorf("no samples collected: austin (PID %s, %s): %s",
+			pid, binary, austinErrorMessage(stderr.String())), time.Since(start)
+	}
+
+	// Memory mode records a sample only when the process's memory grows, so
+	// a process at steady state legitimately yields a header and nothing
+	// else. Say so: a header-only artefact reads as a broken profile, and the
+	// flamegraph path would call it "low cpu load".
+	samples, err := austinSampleCount(fileName)
+	if err != nil {
+		return errors.Wrap(err, "could not read the profile"), time.Since(start)
+	}
+	if samples == 0 {
+		msg := fmt.Sprintf("no memory growth observed during the %s window: austin's memory mode records "+
+			"allocations that grow the process's memory, so a process at steady state yields no samples",
+			job.Interval)
+		if job.OutputType != api.Raw {
+			return errors.Errorf("PID %s: %s", pid, msg), time.Since(start)
+		}
+		if err := appendLine(fileName, "# "+msg); err != nil {
+			return errors.Wrap(err, "could not annotate the profile"), time.Since(start)
+		}
 	}
 
 	// result file name is composed by the job info and the pid
@@ -170,6 +289,68 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 func austinStoppedOnSignal(err error) bool {
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == austinInterruptedExitCode
+}
+
+var (
+	ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	// austinBannerEnd is the version line that closes austin's ASCII-art
+	// banner, e.g. "\__,_|\_,_/__/\__|_|_||_| 4.0.0 [musl-gcc 13.3.0]".
+	austinBannerEnd = regexp.MustCompile(`\d+\.\d+\.\d+ \[[^\]]*\]`)
+)
+
+// austinErrorMessage reduces austin's stderr to the sentence that explains
+// the failure: no ANSI colours, no ASCII-art banner, no emoji, and none of
+// the "please report an issue" boilerplate after it.
+func austinErrorMessage(stderr string) string {
+	s := ansiEscape.ReplaceAllString(stderr, "")
+	if loc := austinBannerEnd.FindStringIndex(s); loc != nil {
+		s = s[loc[1]:]
+	}
+	if i := strings.Index(s, "If you are sure"); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.TrimLeftFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	if s == "" {
+		return "no error output"
+	}
+	const maxLen = 300
+	if len(s) > maxLen {
+		s = s[:maxLen] + "…"
+	}
+	return s
+}
+
+// austinSampleCount counts the sample lines in austin's text output. Every
+// sample starts with its process ("P<pid>;"); header and metadata lines
+// start with "#".
+func austinSampleCount(fileName string) (int, error) {
+	f, err := os.Open(fileName) //nolint:gosec // path built by us from TmpDir
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	n := 0
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "P") {
+			n++
+		}
+	}
+	return n, scanner.Err()
+}
+
+func appendLine(fileName, line string) error {
+	f, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0) //nolint:gosec // path built by us from TmpDir
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(line + "\n"); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // convertMojo rewrites fileName in place when it holds austin's binary MOJO
