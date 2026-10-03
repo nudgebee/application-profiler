@@ -84,19 +84,13 @@ func Test_convertMojo(t *testing.T) {
 	})
 }
 
-// fakeProc builds a /proc/<pid> tree: an exe link, a maps file, and the
-// files present under the target's root.
-func fakeProc(t *testing.T, pid, exe, maps string, rootFiles ...string) string {
+// fakeProc builds a /proc/<pid> tree with an exe link and a maps file.
+func fakeProc(t *testing.T, pid, exe, maps string) string {
 	t.Helper()
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, pid, "root"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, pid), 0o755))
 	require.NoError(t, os.Symlink(exe, filepath.Join(dir, pid, "exe")))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, pid, "maps"), []byte(maps), 0o600))
-	for _, f := range rootFiles {
-		p := filepath.Join(dir, pid, "root", f)
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, nil, 0o600))
-	}
 	return dir
 }
 
@@ -107,8 +101,21 @@ func useProcDir(t *testing.T, dir string) {
 	t.Cleanup(func() { procDir = old })
 }
 
+// readableSources makes only the given sources (relative to dir) readable.
+func readableSources(t *testing.T, dir string, rel ...string) {
+	t.Helper()
+	ok := map[string]bool{}
+	for _, r := range rel {
+		ok[filepath.Join(dir, r)] = true
+	}
+	old := sourceReadable
+	sourceReadable = func(path string) bool { return ok[path] }
+	t.Cleanup(func() { sourceReadable = old })
+}
+
 // Test_austinTargetFiles — austin opens the interpreter and libpython by the
-// paths in /proc/<pid>/maps, so those are exactly the files to mount.
+// paths in /proc/<pid>/maps, so those are the files to mount, each read
+// through the link to the inode the process actually mapped.
 func Test_austinTargetFiles(t *testing.T) {
 	const maps = `55d0c0a00000-55d0c0a01000 r--p 00000000 00:2e 1234 /usr/local/bin/python3.12
 7f1c40000000-7f1c40200000 r--p 00000000 00:2e 1235 /usr/local/lib/libpython3.12.so.1.0
@@ -117,30 +124,43 @@ func Test_austinTargetFiles(t *testing.T) {
 7f1c60000000-7f1c60100000 r-xp 00000000 00:2e 1237 /usr/local/lib/python3.12/lib-dynload/_json.cpython-312-x86_64-linux-musl.so
 7ffd10000000-7ffd10021000 rw-p 00000000 00:00 0 [stack]
 `
+	libpython := "42/map_files/7f1c40000000-7f1c40200000"
 
-	t.Run("interpreter first, then libpython, each once", func(t *testing.T) {
-		useProcDir(t, fakeProc(t, "42", "/usr/local/bin/python3.12", maps,
-			"/usr/local/bin/python3.12", "/usr/local/lib/libpython3.12.so.1.0", "/lib/ld-musl-x86_64.so.1"))
+	t.Run("interpreter first, then libpython from its first mapping", func(t *testing.T) {
+		dir := fakeProc(t, "42", "/usr/local/bin/python3.12", maps)
+		useProcDir(t, dir)
+		readableSources(t, dir, "42/exe", libpython)
 
 		files, err := austinTargetFiles("42")
 		require.NoError(t, err)
-		assert.Equal(t, []string{"/usr/local/bin/python3.12", "/usr/local/lib/libpython3.12.so.1.0"}, files)
+		assert.Equal(t, []austinTargetFile{
+			{Path: "/usr/local/bin/python3.12", Source: filepath.Join(dir, "42/exe")},
+			{Path: "/usr/local/lib/libpython3.12.so.1.0", Source: filepath.Join(dir, libpython)},
+		}, files)
 	})
 
-	t.Run("a file missing from the target's root is skipped", func(t *testing.T) {
-		useProcDir(t, fakeProc(t, "42", "/usr/local/bin/python3.12", maps, "/usr/local/bin/python3.12"))
+	t.Run("a source that can't be read is skipped", func(t *testing.T) {
+		dir := fakeProc(t, "42", "/usr/local/bin/python3.12", maps)
+		useProcDir(t, dir)
+		readableSources(t, dir, "42/exe")
 
 		files, err := austinTargetFiles("42")
 		require.NoError(t, err)
-		assert.Equal(t, []string{"/usr/local/bin/python3.12"}, files)
+		assert.Equal(t, []austinTargetFile{{Path: "/usr/local/bin/python3.12", Source: filepath.Join(dir, "42/exe")}}, files)
 	})
 
-	t.Run("a replaced interpreter keeps its path", func(t *testing.T) {
-		useProcDir(t, fakeProc(t, "42", "/usr/bin/python3.11 (deleted)", "", "/usr/bin/python3.11"))
+	t.Run("files replaced on disk keep their path and are read from the mapped inode", func(t *testing.T) {
+		const deleted = "7f1c40000000-7f1c40200000 r--p 00000000 00:2e 1235 /usr/lib/libpython3.11.so.1.0 (deleted)\n"
+		dir := fakeProc(t, "42", "/usr/bin/python3.11 (deleted)", deleted)
+		useProcDir(t, dir)
+		readableSources(t, dir, "42/exe", libpython)
 
 		files, err := austinTargetFiles("42")
 		require.NoError(t, err)
-		assert.Equal(t, []string{"/usr/bin/python3.11"}, files)
+		assert.Equal(t, []austinTargetFile{
+			{Path: "/usr/bin/python3.11", Source: filepath.Join(dir, "42/exe")},
+			{Path: "/usr/lib/libpython3.11.so.1.0", Source: filepath.Join(dir, libpython)},
+		}, files)
 	})
 
 	t.Run("an unknown PID is an error", func(t *testing.T) {
@@ -155,16 +175,21 @@ func Test_austinPythonCommand(t *testing.T) {
 	j := &job.ProfilingJob{Interval: 30 * time.Second}
 
 	t.Run("no target files runs austin directly", func(t *testing.T) {
-		cmd := austinPythonCommand(executil.NewCommander(), j, "42", "/tmp/out", nil)
+		cmd := austinPythonCommand(executil.NewCommander(), j, "42", "/tmp/out", "/tmp/copies", nil)
 		assert.Equal(t, []string{"austin", "-p", "42", "-o", "/tmp/out", "-x", "30", "-m"}, cmd.Args)
 	})
 
 	t.Run("target files run austin in a private mount namespace", func(t *testing.T) {
-		files := []string{"/usr/local/bin/python3.12", "/usr/local/lib/libpython3.12.so.1.0"}
-		cmd := austinPythonCommand(executil.NewCommander(), j, "42", "/tmp/out", files)
+		files := []austinTargetFile{
+			{Path: "/usr/local/bin/python3.12", Source: "/proc/42/exe"},
+			{Path: "/usr/local/lib/libpython3.12.so.1.0", Source: "/proc/42/map_files/7f1c40000000-7f1c40200000"},
+		}
+		cmd := austinPythonCommand(executil.NewCommander(), j, "42", "/tmp/out", "/tmp/copies", files)
 		assert.Equal(t, []string{
 			"unshare", "-m", "--propagation", "private", "sh", "-c", austinInTargetFSScript, "sh",
-			"42", "2", "/usr/local/bin/python3.12", "/usr/local/lib/libpython3.12.so.1.0",
+			"/tmp/copies", "2",
+			"/proc/42/exe", "/usr/local/bin/python3.12",
+			"/proc/42/map_files/7f1c40000000-7f1c40200000", "/usr/local/lib/libpython3.12.so.1.0",
 			"-p", "42", "-o", "/tmp/out", "-x", "30", "-m",
 		}, cmd.Args)
 	})

@@ -54,21 +54,22 @@ const (
 // determine the version of the Python interpreter") or, worse, our own
 // interpreter (a python:3.14 target would be read through our python3.14).
 //
-// The bind can't come straight from /proc/<pid>/root: the kernel refuses a
-// bind whose source lives in another mount namespace (EINVAL). So each file
-// is copied out through /proc/<pid>/root first and the copy is bound, inside
-// a private mount namespace so neither the mounts nor the shadowing of our
-// own python leak into the rest of the agent (mojo2austin runs on it).
+// The bind can't come straight from the target: the kernel refuses a bind
+// whose source lives in another mount namespace (EINVAL). So each file is
+// copied out first and the copy is bound, inside a private mount namespace
+// so neither the mounts nor the shadowing of our own python leak into the
+// rest of the agent (mojo2austin runs on it).
 //
-// Positional args: <pid> <n> <file 1> ... <file n> <austin args...>.
+// Positional args: <copy dir> <n> <source 1> <path 1> ... <source n>
+// <path n> <austin args...>.
 const austinInTargetFSScript = `set -e
-pid=$1; n=$2; shift 2
+dir=$1; n=$2; shift 2
 i=0
 while [ "$i" -lt "$n" ]; do
-	p=$1; shift
-	c="/tmp/austin-target-$pid$p"
+	src=$1; p=$2; shift 2
+	c="$dir$p"
 	mkdir -p "$(dirname "$c")" "$(dirname "$p")"
-	cp "/proc/$pid/root$p" "$c"
+	cp "$src" "$c"
 	[ -e "$p" ] || touch "$p"
 	mount --bind "$c" "$p"
 	i=$((i+1))
@@ -82,28 +83,55 @@ var mojoMagic = []byte{'M', 'O', 'J', 3}
 // can point it at a fake tree.
 var procDir = "/proc"
 
-var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string, targetFiles []string) *exec.Cmd {
+// sourceReadable reports whether a target file can be copied out. A var
+// because /proc/<pid>/exe and map_files are magic links a fake tree can't
+// reproduce: they resolve to the mapped inode, not to the path they print.
+var sourceReadable = func(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+var austinPythonCommand = func(commander executil.Commander, job *job.ProfilingJob, pid string, fileName string, copyDir string, targetFiles []austinTargetFile) *exec.Cmd {
 	interval := strconv.Itoa(int(job.Interval.Seconds()))
 	austinArgs := []string{"-p", pid, "-o", fileName, "-x", interval, "-m"}
 	if len(targetFiles) == 0 {
 		return commander.Command(austinLocation, austinArgs...)
 	}
-	args := []string{"-m", "--propagation", "private", "sh", "-c", austinInTargetFSScript, "sh", pid, strconv.Itoa(len(targetFiles))}
-	args = append(args, targetFiles...)
+	args := []string{"-m", "--propagation", "private", "sh", "-c", austinInTargetFSScript, "sh", copyDir, strconv.Itoa(len(targetFiles))}
+	for _, f := range targetFiles {
+		args = append(args, f.Source, f.Path)
+	}
 	args = append(args, austinArgs...)
 	return commander.Command(unshareLocation, args...)
 }
 
+// austinTargetFile is one file austin opens in the target: Path is where
+// austin looks for it, Source where the exact file the process mapped can be
+// read from this container.
+type austinTargetFile struct {
+	Path   string
+	Source string
+}
+
 // austinTargetFiles returns the files austin opens by the path it finds in
 // /proc/<pid>/maps: the interpreter binary and, for a shared build,
-// libpython. Only files reachable through /proc/<pid>/root are returned, so
-// the caller can mount every one of them.
-func austinTargetFiles(pid string) ([]string, error) {
+// libpython.
+//
+// Each is read through a magic link to the inode the process actually
+// mapped (/proc/<pid>/exe for the interpreter, /proc/<pid>/map_files/<range>
+// for libpython), not through /proc/<pid>/root<path>. A file replaced on disk
+// since the process started (maps then says "(deleted)") would otherwise be
+// read from its replacement, and austin would resolve its symbols against
+// the wrong build.
+func austinTargetFiles(pid string) ([]austinTargetFile, error) {
 	exe, err := os.Readlink(filepath.Join(procDir, pid, "exe"))
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not resolve the interpreter of PID %s", pid)
 	}
-	candidates := []string{strings.TrimSuffix(exe, " (deleted)")}
+	candidates := []austinTargetFile{{
+		Path:   strings.TrimSuffix(exe, " (deleted)"),
+		Source: filepath.Join(procDir, pid, "exe"),
+	}}
 
 	maps, err := os.ReadFile(filepath.Join(procDir, pid, "maps")) //nolint:gosec // path built from procDir and a numeric PID
 	if err != nil {
@@ -114,25 +142,34 @@ func austinTargetFiles(pid string) ([]string, error) {
 		if len(fields) < 6 {
 			continue
 		}
-		path := strings.Join(fields[5:], " ")
+		path := strings.TrimSuffix(strings.Join(fields[5:], " "), " (deleted)")
 		if strings.HasPrefix(filepath.Base(path), "libpython") {
-			candidates = append(candidates, path)
+			candidates = append(candidates, austinTargetFile{
+				Path:   path,
+				Source: filepath.Join(procDir, pid, "map_files", fields[0]),
+			})
 		}
 	}
 
-	var files []string
+	var files []austinTargetFile
 	seen := map[string]bool{}
 	for _, f := range candidates {
-		if seen[f] || !filepath.IsAbs(f) {
+		if seen[f.Path] || !filepath.IsAbs(f.Path) {
 			continue
 		}
-		seen[f] = true
-		if _, err := os.Stat(filepath.Join(procDir, pid, "root", f)); err != nil {
+		seen[f.Path] = true
+		if !sourceReadable(f.Source) {
 			continue
 		}
 		files = append(files, f)
 	}
 	return files, nil
+}
+
+// austinCopyDir is where the target's interpreter files are copied for one
+// PID.
+func austinCopyDir(pid string) string {
+	return filepath.Join(common.TmpDir(), "austin-target-"+pid)
 }
 
 type AustinPythonProfiler struct {
@@ -218,10 +255,14 @@ func (p *austinPythonManager) invoke(job *job.ProfilingJob, pid string) (error, 
 		log.DebugLogLn(err.Error())
 	}
 	binary := "unknown binary"
+	copyDir := austinCopyDir(pid)
 	if len(targetFiles) > 0 {
-		binary = targetFiles[0]
+		binary = targetFiles[0].Path
+		// The copies are bound only inside austin's own mount namespace,
+		// which is gone once it exits; libpython alone can be tens of MB.
+		defer func() { _ = os.RemoveAll(copyDir) }()
 	}
-	cmd := austinPythonCommand(p.commander, job, pid, fileName, targetFiles)
+	cmd := austinPythonCommand(p.commander, job, pid, fileName, copyDir, targetFiles)
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	err = cmd.Run()
@@ -334,7 +375,7 @@ func austinSampleCount(fileName string) (int, error) {
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
-		if strings.HasPrefix(scanner.Text(), "P") {
+		if line := scanner.Bytes(); len(line) > 0 && line[0] == 'P' {
 			n++
 		}
 	}
