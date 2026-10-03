@@ -70,7 +70,10 @@ func GetFileExtension(tool api.ProfilingTool, outputType api.OutputType) string 
 			// api.FlameGraph
 			return ".svg"
 		}
-	case api.Bpf, api.Perf:
+	// austin had no case and fell through to ".svg", so a raw (text) memory
+	// profile shipped as agent-raw-<pid>-1.svg.gz — and consumers that pick a
+	// renderer by suffix drew it as a broken image.
+	case api.Bpf, api.Perf, api.Austin:
 		switch outputType {
 		case api.Raw:
 			return ".txt"
