@@ -396,7 +396,7 @@ func Test_pythonManager_invoke(t *testing.T) {
 			},
 		},
 		{
-			name: "should invoke return nil when fail handle flamegraph",
+			name: "should invoke fail when handle flamegraph fails",
 			given: func() (fields, args) {
 				log.SetPrintLogs(true)
 				commander := executil.NewFakeCommander()
@@ -422,7 +422,9 @@ func Test_pythonManager_invoke(t *testing.T) {
 				return fields.PythonProfiler.invoke(args.job, args.pid)
 			},
 			then: func(t *testing.T, fields fields, err error) {
-				require.NoError(t, err)
+				// nothing is published, so the PID must count as failed
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "could not generate flamegraph")
 				assert.True(t, fields.PythonProfiler.PythonManager.(*pythonManager).publisher.(*publish.Fake).On("Do").InvokedTimes() == 0)
 			},
 		},

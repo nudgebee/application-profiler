@@ -105,8 +105,9 @@ func (b *bpfManager) invoke(job *job.ProfilingJob, pid string) (error, time.Dura
 
 	err = b.handleFlamegraph(job, flamegraph.Get(job), fileName, resultFileName)
 	if err != nil {
-		log.ErrorLogLn(fmt.Sprintf("could not generate flamegraph (PID: %s): %s", pid, err.Error()))
-		return nil, time.Since(start)
+		// Not nil: nothing is published for this PID, and a run that
+		// ends without a result must not report success.
+		return errors.Wrap(err, "could not generate flamegraph"), time.Since(start)
 	}
 
 	return b.publisher.Do(job.Compressor, resultFileName, job.OutputType), time.Since(start)

@@ -123,8 +123,9 @@ func (p *pythonManager) invoke(job *job.ProfilingJob, pid string) (error, time.D
 	} else {
 		err = p.handleFlamegraph(job, flamegraph.Get(job), fileName, resultFileName)
 		if err != nil {
-			log.ErrorLogLn(fmt.Sprintf("could not generate flamegraph (PID: %s): %s", pid, err.Error()))
-			return nil, time.Since(start)
+			// Not nil: nothing is published for this PID, and a run that
+			// ends without a result must not report success.
+			return errors.Wrap(err, "could not generate flamegraph"), time.Since(start)
 		}
 	}
 
