@@ -2,6 +2,7 @@ package common
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nudgebee/application-profiler/api"
@@ -568,4 +569,10 @@ func TestGetFileExtension(t *testing.T) {
 
 		})
 	}
+}
+
+func TestGetFileExtension_Austin(t *testing.T) {
+	assert.Equal(t, ".txt", GetFileExtension(api.Austin, api.Raw), "a raw austin profile is text")
+	assert.Equal(t, ".svg", GetFileExtension(api.Austin, api.FlameGraph))
+	assert.True(t, strings.HasSuffix(GetResultFile("/tmp", api.Austin, api.Raw, "42", 1), "-42-1.txt"))
 }

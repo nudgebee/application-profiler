@@ -65,6 +65,11 @@ profile() {
 		docker logs "$agent" >&2
 		return 1
 	fi
+	# Consumers pick a renderer by suffix; a raw profile must not look like an SVG.
+	case "$file" in
+	*.txt.gz) ;;
+	*) echo "raw profile published as $file, want *.txt.gz" >&2; return 1 ;;
+	esac
 	docker cp -q "$agent:$file" "$work/profile.gz"
 	gzip -dc "$work/profile.gz"
 }
