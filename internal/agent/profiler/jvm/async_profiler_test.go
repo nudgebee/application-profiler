@@ -310,10 +310,12 @@ func TestAsyncProfiler_Invoke(t *testing.T) {
 			},
 		},
 		{
-			name: "should invoke fail when invoke fail",
+			name: "should invoke fail when invoke fails for every PID",
 			given: func() (fields, args) {
 				asyncProfilerManager := newFakeAsyncProfilerManager()
-				asyncProfilerManager.On("invoke").Return(errors.New("fake invoke error"), time.Duration(0))
+				asyncProfilerManager.On("invoke").
+					Return(errors.New("fake invoke error"), time.Duration(0)).
+					Return(errors.New("fake invoke error"), time.Duration(0))
 
 				return fields{
 						AsyncProfiler: AsyncProfiler{
@@ -335,8 +337,8 @@ func TestAsyncProfiler_Invoke(t *testing.T) {
 			},
 			then: func(t *testing.T, err error, fields fields) {
 				require.Error(t, err)
-				assert.EqualError(t, err, "fake invoke error")
-				assert.Equal(t, 1, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("invoke").InvokedTimes())
+				assert.EqualError(t, err, "PID 1000: fake invoke error; PID 2000: fake invoke error")
+				assert.Equal(t, 2, fields.AsyncProfiler.AsyncProfilerManager.(FakeAsyncProfilerManager).On("invoke").InvokedTimes())
 			},
 		},
 	}

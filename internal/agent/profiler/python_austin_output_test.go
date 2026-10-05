@@ -262,3 +262,30 @@ func Test_invoke_noMemoryGrowth(t *testing.T) {
 		assert.Equal(t, 0, publisher.On("Do").InvokedTimes())
 	})
 }
+
+// Test_invoke_flamegraphFailure — a flamegraph that cannot be rendered leaves
+// nothing to publish, so the PID must fail rather than end the run as a
+// success without a result.
+func Test_invoke_flamegraphFailure(t *testing.T) {
+	tmp := t.TempDir()
+	oldTmp := common.TmpDir
+	common.TmpDir = func() string { return tmp }
+	t.Cleanup(func() { common.TmpDir = oldTmp })
+	useProcDir(t, t.TempDir())
+
+	// No language: flamegraph.Get returns a renderer that always fails.
+	j := &job.ProfilingJob{Tool: api.Austin, OutputType: api.FlameGraph, Interval: 30 * time.Second, Iteration: 1}
+	raw := common.GetResultFile(tmp, j.Tool, api.Raw, "42", j.Iteration)
+	commander := executil.NewFakeCommander()
+	commander.On("Command").Return(exec.Command("sh", "-c",
+		"printf '# austin: 4.0.0\\n# mode: memory\\nP1;T0:1;/app.py:<module>:6 131072\\n' > "+raw))
+	publisher := publish.NewFakePublisher()
+	publisher.On("Do").Return(nil)
+	m := &austinPythonManager{commander: commander, publisher: publisher}
+
+	err, _ := m.invoke(j, "42")
+
+	require.Error(t, err)
+	assert.EqualError(t, err, "could not generate flamegraph: could not convert raw format to flamegraph: StackSamplesToFlameGraph with error")
+	assert.Equal(t, 0, publisher.On("Do").InvokedTimes())
+}

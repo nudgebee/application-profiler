@@ -76,3 +76,22 @@ jobs:
 
       - name: Profile real Python targets
         run: test/e2e/python-austin.sh application-profiler-python:e2e
+
+      # A PID the profiler cannot attach to (a shell or helper process next
+      # to the workload) used to fail the whole run.
+      - name: Profile a Python target next to a non-Python process
+        run: test/e2e/python-austin-multi-pid.sh application-profiler-python:e2e
+
+  # The pprof profiler reads the cause of a failed scrape from wget's stderr,
+  # which unit tests can only fake. Scrape real Go servers with the image's
+  # own wget instead.
+  go-pprof-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the bpf profiler image
+        run: docker build -f docker/bpf/Dockerfile -t application-profiler-bpf:e2e .
+
+      - name: Profile real Go servers
+        run: test/e2e/go-pprof.sh application-profiler-bpf:e2e

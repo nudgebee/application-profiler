@@ -2,14 +2,12 @@ package profiler
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/alitto/pond"
 	"github.com/nudgebee/application-profiler/api"
 	"github.com/nudgebee/application-profiler/internal/agent/config"
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -77,27 +75,10 @@ func (p *PerfProfiler) SetUp(job *job.ProfilingJob) error {
 
 func (p *PerfProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-
-	pool := pond.New(len(p.targetPIDs), 0, pond.MinWorkers(len(p.targetPIDs)))
-	defer pool.StopAndWait()
-
-	// create a task group associated to a context
-	group, _ := pool.GroupContext(context.Background())
-
-	// submit tasks to profile
-	for _, pid := range p.targetPIDs {
-		pid := pid
-		group.Submit(func() error {
-			err, _ := p.invoke(job, pid)
-			return err
-		})
-		// wait a bit between jobs for not overloading the system
-		time.Sleep(p.delay)
-	}
-
-	// wait for all tasks to finish
-	err := group.Wait()
-
+	err := common.ProfilePIDs(p.targetPIDs, p.delay, func(pid string) error {
+		err, _ := p.invoke(job, pid)
+		return err
+	})
 	return err, time.Since(start)
 }
 
@@ -123,8 +104,9 @@ func (m *perfManager) invoke(job *job.ProfilingJob, pid string) (error, time.Dur
 
 	err = m.handleFlamegraph(job, flamegraph.Get(job), fileName, resultFileName)
 	if err != nil {
-		log.ErrorLogLn(fmt.Sprintf("could not generate flamegraph (PID: %s): %s", pid, err.Error()))
-		return nil, time.Since(start)
+		// Not nil: nothing is published for this PID, and a run that
+		// ends without a result must not report success.
+		return errors.Wrap(err, "could not generate flamegraph"), time.Since(start)
 	}
 
 	return m.publisher.Do(job.Compressor, resultFileName, job.OutputType), time.Since(start)

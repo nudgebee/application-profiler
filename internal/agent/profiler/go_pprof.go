@@ -3,15 +3,14 @@ package profiler
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/alitto/pond"
 	"github.com/nudgebee/application-profiler/api"
 	"github.com/nudgebee/application-profiler/internal/agent/config"
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -24,10 +23,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	goPprofDelayBetweenJobs = 2 * time.Second
+	// defaultPprofPort is scraped when the target's listening port cannot be
+	// detected.
+	defaultPprofPort = "8080"
+)
+
+// wgetHTTPStatus finds the status code in busybox wget's report of an HTTP
+// error, e.g. "wget: server returned error: HTTP/1.1 401 Unauthorized".
+var wgetHTTPStatus = regexp.MustCompile(`HTTP/\d(?:\.\d)? (\d{3})`)
+
 // GoPprofProfiler uses Go's pprof HTTP server to collect profiles.
 type GoPprofProfiler struct {
 	manager    *goPprofManager
 	targetPIDs []string
+	delay      time.Duration
 }
 
 type goPprofManager struct {
@@ -37,7 +48,10 @@ type goPprofManager struct {
 
 // NewGoPprofProfiler creates a new profiler with the given publisher.
 func NewGoPprofProfiler(commander executil.Commander, publisher publish.Publisher) *GoPprofProfiler {
-	return &GoPprofProfiler{manager: &goPprofManager{commander: commander, publisher: publisher}}
+	return &GoPprofProfiler{
+		manager: &goPprofManager{commander: commander, publisher: publisher},
+		delay:   goPprofDelayBetweenJobs,
+	}
 }
 
 // SetUp ensures the job has a valid PID.
@@ -59,29 +73,18 @@ func (p *GoPprofProfiler) SetUp(job *job.ProfilingJob) error {
 // Invoke runs the profiling job and returns execution time.
 func (p *GoPprofProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-	pool := pond.New(len(p.targetPIDs), 0, pond.MinWorkers(len(p.targetPIDs)))
-	defer pool.StopAndWait()
-	// create a task group associated to a context
-	group, _ := pool.GroupContext(context.Background())
-	// submit tasks to profile
-	for _, pid := range p.targetPIDs {
-		pid := pid
-		group.Submit(func() error {
-			job.PID = pid
-			err := p.manager.fetchProfileFromPID(job)
-			return err
-		})
-		// wait a bit between jobs for not overloading the system
-		time.Sleep(2 * time.Second)
-	}
-	// wait for all tasks to finish
-	err := group.Wait()
-
+	err := common.ProfilePIDs(p.targetPIDs, p.delay, func(pid string) error {
+		// The PIDs run concurrently, so each needs its own copy of the job:
+		// setting PID on the shared one let a later PID's value leak into an
+		// earlier PID's scrape.
+		pidJob := *job
+		pidJob.PID = pid
+		return p.manager.fetchProfileFromPID(&pidJob)
+	})
 	return err, time.Since(start)
 }
+
 func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileName string) error {
-	var out bytes.Buffer
-	var stderr bytes.Buffer
 	// A heap profile is a snapshot of what the process is holding right now, so
 	// it takes no duration. Passing ?seconds= makes Go return a DELTA over that
 	// window instead — it samples, waits, samples again and subtracts — which
@@ -93,45 +96,63 @@ func (p *goPprofManager) heapProfile(job *job.ProfilingJob, port string, fileNam
 	// rather than whatever the last GC cycle happened to leave behind; without
 	// it a process that has not GC'd yet reports nothing at all.
 	targetURL := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/heap?gc=1", port)
-	// for local testing
-	// cmd := exec.Command(
-	// 	"curl", targetURL, "-o", fileName,
-	// )
-	cmd := exec.Command(
-		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
-	)
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err != nil {
-		log.ErrorLogLn(out.String())
-		return errors.Wrapf(err, "failed to nsenter+wget %q error %s", targetURL, stderr.String())
-	}
-	return nil
+	return p.scrape(job.PID, port, targetURL, fileName)
 }
 func (p *goPprofManager) cpuProfile(job *job.ProfilingJob, port string, fileName string) error {
-	var out bytes.Buffer
-	var stderr bytes.Buffer
 	targetURL := fmt.Sprintf(
 		"http://127.0.0.1:%s/debug/pprof/%s?seconds=%d",
 		port, "profile", int(job.Interval.Seconds()),
 	)
+	return p.scrape(job.PID, port, targetURL, fileName)
+}
+
+// scrape downloads targetURL into fileName from inside the PID's network
+// namespace, where 127.0.0.1 is the target's own loopback.
+func (p *goPprofManager) scrape(pid string, port string, targetURL string, fileName string) error {
+	var out bytes.Buffer
+	var stderr bytes.Buffer
 	// for local testing
 	// cmd := exec.Command(
 	// 	"curl", targetURL, "-o", fileName,
 	// )
-	cmd := exec.Command(
-		"nsenter", "-t", job.PID, "-n", "wget", "-qO", fileName, targetURL,
+	cmd := p.commander.Command(
+		"nsenter", "-t", pid, "-n", "wget", "-qO", fileName, targetURL,
 	)
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
 		log.ErrorLogLn(out.String())
-		return errors.Wrapf(err, "failed to nsenter+wget %q error %s", targetURL, stderr.String())
+		return pprofScrapeError(port, targetURL, stderr.String(), err)
 	}
 	return nil
 }
+
+// pprofScrapeError turns a failed scrape into a reason the user can act on.
+// wget exits 1 for every failure, so the cause can only be read from its
+// stderr. The images ship busybox wget, which prints the failure even with
+// -q:
+//
+//	wget: server returned error: HTTP/1.1 401 Unauthorized
+//	wget: can't connect to remote host (127.0.0.1): Connection refused
+//
+// Anything else is passed through as wget reported it.
+func pprofScrapeError(port string, targetURL string, stderr string, err error) error {
+	msg := strings.TrimSpace(stderr)
+	if m := wgetHTTPStatus.FindStringSubmatch(msg); m != nil {
+		switch m[1] {
+		case "401", "403":
+			return errors.Errorf("the pprof endpoint on :%s requires authentication", port)
+		case "404":
+			return errors.Errorf("no /debug/pprof handler on :%s (is net/http/pprof registered?)", port)
+		}
+	}
+	if strings.Contains(msg, "Connection refused") {
+		return errors.Errorf("nothing listening on :%s", port)
+	}
+	return errors.Wrapf(err, "failed to nsenter+wget %q error %s", targetURL, msg)
+}
+
 func (p *goPprofManager) convertPprofToRaw(pprofFilePath string) (string, error) {
 	// Convert the pprof output to raw format using go tool pprof
 	var out bytes.Buffer
@@ -149,53 +170,69 @@ func (p *goPprofManager) convertPprofToRaw(pprofFilePath string) (string, error)
 }
 
 func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
-	port, err := findListeningPortForPID(job.PID)
-	if err != nil {
-		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, err))
-		port = "8080"
+	port, portErr := findListeningPortForPID(m.commander, job.PID)
+	if portErr != nil {
+		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, portErr))
+		port = defaultPprofPort
 		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
 	}
+	err := m.fetchProfile(job, port)
+	if err != nil && portErr != nil {
+		// The port was a guess, not one the target listens on. Say so, or
+		// "nothing listening on :8080" reads as if the target's own pprof
+		// port were down.
+		return errors.Wrapf(err, "could not detect the listening port (%s), so tried the default :%s",
+			portErr, port)
+	}
+	return err
+}
+
+// fetchProfile scrapes the profile the job asks for from port and publishes
+// it. The PID is not repeated in the errors: the caller reports each PID's
+// failure under its PID.
+func (m *goPprofManager) fetchProfile(job *job.ProfilingJob, port string) error {
 	rawFilePath := common.GetResultFile(common.TmpDir(), job.Tool, job.OutputType, job.PID, job.Iteration)
-	if job.OutputType == api.HeapDump {
-		err = m.heapProfile(job, port, rawFilePath)
+	switch job.OutputType {
+	case api.HeapDump:
+		err := m.heapProfile(job, port, rawFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to fetch heap profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to fetch heap profile")
 		}
-	} else if job.OutputType == api.Pprof {
-		err = m.cpuProfile(job, port, rawFilePath)
+	case api.Pprof:
+		err := m.cpuProfile(job, port, rawFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to fetch CPU profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to fetch CPU profile")
 		}
-	} else if job.OutputType == api.Raw {
+	case api.Raw:
 		profileFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "cpu", job.PID, job.Iteration)
-		err = m.cpuProfile(job, port, profileFilePath)
+		err := m.cpuProfile(job, port, profileFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to create CPU profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to create CPU profile")
 		}
 		profileRaw, err := m.convertPprofToRaw(profileFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to convert CPU profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to convert CPU profile")
 		}
 		heapFilePath := common.GetResultFile(common.TmpDir(), job.Tool, "heap", job.PID, job.Iteration)
 		err = m.heapProfile(job, port, heapFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to fetch heap profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to fetch heap profile")
 		}
 		heapRaw, err := m.convertPprofToRaw(heapFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "failed to convert heap profile for PID %s", job.PID)
+			return errors.Wrap(err, "failed to convert heap profile")
 		}
 		file.Write(rawFilePath, fmt.Sprintf("heap dump\n %s \n cpu dump\n %s", heapRaw, profileRaw))
-	} else {
+	default:
 		return errors.New("unsupported output type for Go pprof profiler")
 	}
 	// Finally, publish the file as before
 	return m.publisher.Do(job.Compressor, rawFilePath, job.OutputType)
 }
 
-func findListeningPortForPID(pid string) (string, error) {
+func findListeningPortForPID(commander executil.Commander, pid string) (string, error) {
 	// nsenter into the PID's network namespace and list listening TCP sockets
-	cmd := exec.Command("nsenter", "-t", pid, "-n", "ss", "-tulnp")
+	cmd := commander.Command("nsenter", "-t", pid, "-n", "ss", "-tulnp")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to run ss")

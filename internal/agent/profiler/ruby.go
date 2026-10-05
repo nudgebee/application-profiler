@@ -2,14 +2,12 @@ package profiler
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"time"
 
 	"github.com/agrison/go-commons-lang/stringUtils"
-	"github.com/alitto/pond"
 	"github.com/nudgebee/application-profiler/internal/agent/config"
 	"github.com/nudgebee/application-profiler/internal/agent/job"
 	"github.com/nudgebee/application-profiler/internal/agent/profiler/common"
@@ -78,28 +76,10 @@ func (r *RubyProfiler) SetUp(job *job.ProfilingJob) error {
 
 func (r *RubyProfiler) Invoke(job *job.ProfilingJob) (error, time.Duration) {
 	start := time.Now()
-
-	// create a pool of workers
-	pool := pond.New(len(r.targetPIDs), 0, pond.MinWorkers(len(r.targetPIDs)))
-	defer pool.StopAndWait()
-
-	// create a task group associated to a context
-	group, _ := pool.GroupContext(context.Background())
-
-	// submit tasks to profile
-	for _, pid := range r.targetPIDs {
-		pid := pid
-		group.Submit(func() error {
-			err, _ := r.invoke(job, pid)
-			return err
-		})
-		// wait a bit between jobs for not overloading the system
-		time.Sleep(r.delay)
-	}
-
-	// wait for all tasks to finish
-	err := group.Wait()
-
+	err := common.ProfilePIDs(r.targetPIDs, r.delay, func(pid string) error {
+		err, _ := r.invoke(job, pid)
+		return err
+	})
 	return err, time.Since(start)
 }
 
