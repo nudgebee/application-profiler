@@ -1,4 +1,4 @@
-FROM golang:1.26.10-bookworm AS agentbuild
+FROM golang:1.27.2-bookworm AS agentbuild
 ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
