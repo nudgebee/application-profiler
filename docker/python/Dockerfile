@@ -1,4 +1,4 @@
-FROM golang:1.26.5-alpine AS agentbuild
+FROM golang:1.26.10-alpine AS agentbuild
 ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
@@ -16,8 +16,11 @@ RUN pip3 install py-spy==0.4.2  \
     && apt-get update && apt-get install -y git \
     && git clone https://github.com/brendangregg/FlameGraph
 
-FROM python:3.14.0-alpine
-RUN apk add --update --no-cache perl procps strace  \
+FROM python:3.14.10-alpine
+# apk upgrade first: apk add only updates the packages it names, so base
+# packages such as openssl would otherwise stay at the image's build-time level.
+RUN apk upgrade --no-cache  \
+    && apk add --no-cache perl procps strace  \
     && mkdir -p /app/FlameGraph
 COPY --from=pyspybuild /FlameGraph /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
@@ -27,7 +30,10 @@ COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/
 # target is reported as "not a Python process". It only writes the binary MOJO
 # format, so austin-python comes along for mojo2austin, which converts it back
 # to the text format the raw artefact and flamegraph.pl are built around.
-RUN pip3 install austin-dist==4.0.0 austin-python==1.7.1
+# pip is dropped afterwards: nothing runs it at profile time, and its vendored
+# copies of setuptools and urllib3 carry CVEs that ship with the image otherwise.
+RUN pip3 install austin-dist==4.0.0 austin-python==1.7.1  \
+    && pip3 uninstall -y pip
 RUN chmod +x /app/get-ps-command.sh
 
 CMD [ "/app/agent" ]

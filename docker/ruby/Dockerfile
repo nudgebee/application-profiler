@@ -1,4 +1,4 @@
-FROM golang:1.26.5-bookworm AS agentbuild
+FROM golang:1.26.10-bookworm AS agentbuild
 ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
@@ -13,8 +13,11 @@ RUN git clone https://github.com/brendangregg/FlameGraph  \
 WORKDIR /rbspy
 RUN cargo build --release
 
-FROM bitnami/minideb:bookworm
+# trixie, not bookworm: bookworm leaves zlib CVE-2023-45853 unfixed. rbspy and
+# the agent are built against bookworm's older glibc, which runs on trixie's.
+FROM bitnami/minideb:trixie
 RUN apt-get update  \
+    && apt-get upgrade -y  \
     && apt-get install -y procps strace  \
     && apt-get clean \
     && mkdir -p /app/FlameGraph
