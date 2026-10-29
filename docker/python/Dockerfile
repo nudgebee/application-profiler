@@ -32,7 +32,7 @@ COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/
 # to the text format the raw artefact and flamegraph.pl are built around.
 # pip is dropped afterwards: nothing runs it at profile time, and its vendored
 # copies of setuptools and urllib3 carry CVEs that ship with the image otherwise.
-RUN pip3 install austin-dist==4.0.0 austin-python==1.7.1  \
+RUN pip3 install --no-cache-dir austin-dist==4.0.0 austin-python==1.7.1  \
     && pip3 uninstall -y pip
 RUN chmod +x /app/get-ps-command.sh
 
