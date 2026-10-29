@@ -1,6 +1,6 @@
 ARG JAVA_VERSION_TAG=21
 ARG ASYNCP_VERSION=2.9
-FROM golang:1.26.5-alpine AS agentbuild
+FROM golang:1.26.10-alpine AS agentbuild
 ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
@@ -61,6 +61,7 @@ RUN apk add --no-cache curl g++ git linux-headers make tar wget  \
 
 FROM alpine:3.23.4
 RUN mkdir -p /app/async-profiler/build  \
+    && apk upgrade --no-cache  \
     && apk add --no-cache procps coreutils
 COPY --from=agentbuild /go/bin/agent /app
 COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/jvm/profiler.sh /app/async-profiler
