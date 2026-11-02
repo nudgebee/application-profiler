@@ -30,9 +30,12 @@ COPY --from=agentbuild /go/src/github.com/nudgebee/application-profiler/contrib/
 # target is reported as "not a Python process". It only writes the binary MOJO
 # format, so austin-python comes along for mojo2austin, which converts it back
 # to the text format the raw artefact and flamegraph.pl are built around.
+# austin-python 2.x drops its protobuf 3 dependency (1.7.1 pinned protobuf~=3.12,
+# which carries GHSA-8qvm-5x2c-j2w7 and GHSA-7gcm-g887-7qv7); mojo2austin output is
+# the same samples.
 # pip is dropped afterwards: nothing runs it at profile time, and its vendored
 # copies of setuptools and urllib3 carry CVEs that ship with the image otherwise.
-RUN pip3 install --no-cache-dir austin-dist==4.0.0 austin-python==1.7.1  \
+RUN pip3 install --no-cache-dir austin-dist==4.0.0 austin-python==2.6.0  \
     && pip3 uninstall -y pip
 RUN chmod +x /app/get-ps-command.sh
 
