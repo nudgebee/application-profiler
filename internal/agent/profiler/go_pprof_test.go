@@ -128,6 +128,56 @@ func Test_goPprofManager_fetchProfileFromPID(t *testing.T) {
 		require.NoError(t, m.fetchProfileFromPID(j))
 		assert.Equal(t, 1, publisher.On("Do").InvokedTimes())
 	})
+
+	// A service whose API port takes a token serves pprof on a loopback port of
+	// its own. ss lists the API port first; the loopback one is probed first and
+	// is the one scraped.
+	t.Run("of several listeners, the loopback pprof port is scraped", func(t *testing.T) {
+		m, publisher, j := setup(t, api.HeapDump,
+			ssOutput(
+				`tcp   LISTEN 0      4096       *:8000            *:*    users:(("server",pid=42,fd=3))`,
+				`tcp   LISTEN 0      4096       127.0.0.1:6060    *:*    users:(("server",pid=42,fd=7))`,
+			),
+			exec.Command("true"), // probe :6060/debug/pprof/ answers
+			exec.Command("true"), // heap scrape on :6060
+		)
+
+		require.NoError(t, m.fetchProfileFromPID(j))
+		assert.Equal(t, 1, publisher.On("Do").InvokedTimes())
+	})
+
+	t.Run("of several listeners, the first that serves pprof is scraped", func(t *testing.T) {
+		m, publisher, j := setup(t, api.HeapDump,
+			ssOutput(
+				`tcp   LISTEN 0      4096       *:8000            *:*    users:(("server",pid=42,fd=3))`,
+				`tcp   LISTEN 0      4096       *:9090            *:*    users:(("server",pid=42,fd=5))`,
+			),
+			wgetFailing("wget: server returned error: HTTP/1.1 401 Unauthorized"), // :8000
+			exec.Command("true"), // :9090 serves pprof
+			exec.Command("true"), // heap scrape on :9090
+		)
+
+		require.NoError(t, m.fetchProfileFromPID(j))
+		assert.Equal(t, 1, publisher.On("Do").InvokedTimes())
+	})
+
+	t.Run("several listeners and none serves pprof says why for each", func(t *testing.T) {
+		m, publisher, j := setup(t, api.HeapDump,
+			ssOutput(
+				`tcp   LISTEN 0      4096       *:8000            *:*    users:(("server",pid=42,fd=3))`,
+				`tcp   LISTEN 0      4096       *:9090            *:*    users:(("server",pid=42,fd=5))`,
+			),
+			wgetFailing("wget: server returned error: HTTP/1.1 401 Unauthorized"),
+			wgetFailing("wget: server returned error: HTTP/1.1 404 Not Found"),
+		)
+
+		err := m.fetchProfileFromPID(j)
+
+		assert.EqualError(t, err, "none of the listening ports serves /debug/pprof: "+
+			"the pprof endpoint on :8000 requires authentication; "+
+			"no /debug/pprof handler on :9090 (is net/http/pprof registered?)")
+		assert.Equal(t, 0, publisher.On("Do").InvokedTimes())
+	})
 }
 
 // TestGoPprofProfiler_Invoke — the reason reaches the run's error under its
@@ -154,4 +204,19 @@ func TestGoPprofProfiler_Invoke(t *testing.T) {
 	assert.EqualError(t, err, "PID 42: could not detect the listening port (no listening port found for PID), "+
 		"so tried the default :8080: failed to fetch CPU profile: nothing listening on :8080")
 	assert.Empty(t, j.PID)
+}
+
+func Test_listeningPortsForPID(t *testing.T) {
+	commander := executil.NewFakeCommander()
+	commander.On("Command").Return(ssOutput(
+		`tcp   LISTEN 0      4096       *:8000            *:*    users:(("server",pid=42,fd=3))`,
+		`tcp   LISTEN 0      4096       [::]:8000         [::]:*    users:(("server",pid=42,fd=4))`,
+		`tcp   LISTEN 0      4096       [::1]:6060        [::]:*    users:(("server",pid=42,fd=7))`,
+		`tcp   LISTEN 0      4096       *:9999            *:*    users:(("other",pid=7,fd=3))`,
+	))
+
+	ports, err := listeningPortsForPID(commander, "42")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"6060", "8000"}, ports, "loopback first, each port once, other PIDs ignored")
 }
