@@ -284,8 +284,9 @@ func listeningPortsForPID(commander executil.Commander, pid string) ([]string, e
 		if !strings.Contains(line, "LISTEN") {
 			continue
 		}
-		// optionally: ensure the line really belongs to our PID
-		if !strings.Contains(line, pid) {
+		// The process column reads users:(("name",pid=42,fd=3)). Match the
+		// whole pid= field: a substring match took PID 42's ports from PID 242.
+		if !strings.Contains(line, "pid="+pid+",") {
 			continue
 		}
 		for _, field := range strings.Fields(line) {

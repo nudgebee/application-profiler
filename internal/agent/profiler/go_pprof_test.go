@@ -213,10 +213,12 @@ func Test_listeningPortsForPID(t *testing.T) {
 		`tcp   LISTEN 0      4096       [::]:8000         [::]:*    users:(("server",pid=42,fd=4))`,
 		`tcp   LISTEN 0      4096       [::1]:6060        [::]:*    users:(("server",pid=42,fd=7))`,
 		`tcp   LISTEN 0      4096       *:9999            *:*    users:(("other",pid=7,fd=3))`,
+		`tcp   LISTEN 0      4096       *:7777            *:*    users:(("other",pid=242,fd=3))`,
+		`tcp   LISTEN 0      4096       *:7778            *:*    users:(("other",pid=420,fd=3))`,
 	))
 
 	ports, err := listeningPortsForPID(commander, "42")
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"6060", "8000"}, ports, "loopback first, each port once, other PIDs ignored")
+	assert.Equal(t, []string{"6060", "8000"}, ports, "loopback first, each port once, other PIDs (including 242 and 420) ignored")
 }
