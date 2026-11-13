@@ -12,6 +12,8 @@
 #   - no pprof handler: the error says net/http/pprof is not registered
 #   - nothing listening: the error says the port could not be detected and
 #     the default was tried
+#   - API port behind a token, pprof on a loopback port of its own: the
+#     loopback port is found and a profile is published
 set -euo pipefail
 
 image=${1:?usage: $0 <profiler-bpf-image>}
@@ -24,7 +26,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# server <open|auth|none> <addr>
+# server <open|auth|none|split> <addr> [pprof-addr]
 cat >"$work/main.go" <<'GO'
 package main
 
@@ -47,6 +49,12 @@ func main() {
 	switch mode {
 	case "open":
 		mux.Handle("/debug/pprof/", profiles)
+	case "split":
+		// Every API route takes a token; pprof is on a loopback port of its own.
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "missing or invalid service token", http.StatusUnauthorized)
+		}))
+		go func() { log.Fatal(http.ListenAndServe(os.Args[3], profiles)) }()
 	case "auth":
 		mux.Handle("/debug/pprof/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if user, pass, ok := r.BasicAuth(); !ok || user != "user" || pass != "secret" {
@@ -116,6 +124,7 @@ start_target t-pprof-open "$server" open :6060
 start_target t-pprof-auth "$server" auth :6060
 start_target t-pprof-none "$server" none :9090
 start_target t-no-listener alpine:3.23.4 sleep 100000
+start_target t-pprof-split "$server" split :8000 127.0.0.1:6060
 sleep 2
 
 failed=0
@@ -125,6 +134,13 @@ if file=$(profile t-pprof-open 2>"$work/err") && gzip -dc "$work/t-pprof-open.gz
 	echo "ok   t-pprof-open: published $file"
 else
 	echo "FAIL t-pprof-open: no profile: $(cat "$work/err")"
+	failed=1
+fi
+
+if file=$(profile t-pprof-split 2>"$work/err") && gzip -dc "$work/t-pprof-split.gz" | gzip -t; then
+	echo "ok   t-pprof-split: published $file from the loopback pprof port"
+else
+	echo "FAIL t-pprof-split: no profile: $(cat "$work/err")"
 	failed=1
 fi
 
