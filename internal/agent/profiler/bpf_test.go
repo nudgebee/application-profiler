@@ -167,10 +167,12 @@ func TestBpfProfiler_Invoke(t *testing.T) {
 			},
 		},
 		{
-			name: "should invoke fail when invoke fail",
+			name: "should invoke fail when invoke fails for every PID",
 			given: func() (fields, args) {
 				bpfManager := newFakeBpfManager()
-				bpfManager.On("invoke").Return(errors.New("fake invoke error"), time.Duration(0))
+				bpfManager.On("invoke").
+					Return(errors.New("fake invoke error"), time.Duration(0)).
+					Return(errors.New("fake invoke error"), time.Duration(0))
 
 				return fields{
 						BpfProfiler: &BpfProfiler{
@@ -192,8 +194,8 @@ func TestBpfProfiler_Invoke(t *testing.T) {
 			},
 			then: func(t *testing.T, err error, fields fields) {
 				require.Error(t, err)
-				assert.EqualError(t, err, "fake invoke error")
-				assert.Equal(t, 1, fields.BpfProfiler.BpfManager.(FakeBpfManager).On("invoke").InvokedTimes())
+				assert.EqualError(t, err, "PID 1000: fake invoke error; PID 2000: fake invoke error")
+				assert.Equal(t, 2, fields.BpfProfiler.BpfManager.(FakeBpfManager).On("invoke").InvokedTimes())
 			},
 		},
 	}
@@ -357,7 +359,7 @@ func Test_bpfManager_invoke(t *testing.T) {
 			},
 		},
 		{
-			name: "should invoke return nil when fail handle flamegraph",
+			name: "should invoke fail when handle flamegraph fails",
 			given: func() (fields, args) {
 				log.SetPrintLogs(true)
 				commander := executil.NewFakeCommander()
@@ -383,7 +385,9 @@ func Test_bpfManager_invoke(t *testing.T) {
 				return fields.BpfProfiler.invoke(args.job, args.pid)
 			},
 			then: func(t *testing.T, fields fields, err error) {
-				require.NoError(t, err)
+				// nothing is published, so the PID must count as failed
+				require.Error(t, err)
+				assert.ErrorContains(t, err, "could not generate flamegraph")
 				assert.True(t, fields.BpfProfiler.BpfManager.(*bpfManager).publisher.(*publish.Fake).On("Do").InvokedTimes() == 0)
 			},
 		},

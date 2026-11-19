@@ -1,6 +1,7 @@
 package jvm
 
 import (
+	"sync"
 	"time"
 
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -16,6 +17,8 @@ type FakeAsyncProfilerManager interface {
 
 // fakeAsyncProfilerManager is an implementation of the FakeAsyncProfilerManager interface
 type fakeAsyncProfilerManager struct {
+	// mu serialises invoke, which Invoke calls concurrently, once per PID.
+	mu          sync.Mutex
 	fakeMethods map[string]*fakeAsyncProfilerManagerMethod
 }
 
@@ -59,6 +62,8 @@ func (f *fakeAsyncProfilerManagerMethod) InvokedTimes() int {
 }
 
 func (f *fakeAsyncProfilerManager) invoke(*job.ProfilingJob, string) (error, time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var err error
 	var duration time.Duration
 	f.fakeMethods["invoke"].invokes++
@@ -108,6 +113,19 @@ func (f *fakeAsyncProfilerManager) copyProfilerToTmpDir() error {
 	if f.fakeMethods["copyProfilerToTmpDir"].fakeReturnValues != nil && len(f.fakeMethods["copyProfilerToTmpDir"].fakeReturnValues) > 0 {
 		f.fakeMethods["copyProfilerToTmpDir"].indexExecution++
 		arg0 := f.fakeMethods["copyProfilerToTmpDir"].fakeReturnValues[f.fakeMethods["copyProfilerToTmpDir"].indexExecution-1].([]interface{})[0]
+		if arg0 != nil {
+			err = arg0.(error)
+		}
+	}
+	return err
+}
+
+func (f *fakeAsyncProfilerManager) selectProfilerLibrary(s string) error {
+	var err error
+	f.fakeMethods["selectProfilerLibrary"].invokes++
+	if f.fakeMethods["selectProfilerLibrary"].fakeReturnValues != nil && len(f.fakeMethods["selectProfilerLibrary"].fakeReturnValues) > 0 {
+		f.fakeMethods["selectProfilerLibrary"].indexExecution++
+		arg0 := f.fakeMethods["selectProfilerLibrary"].fakeReturnValues[f.fakeMethods["selectProfilerLibrary"].indexExecution-1].([]interface{})[0]
 		if arg0 != nil {
 			err = arg0.(error)
 		}

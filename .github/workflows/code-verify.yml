@@ -25,3 +25,73 @@ jobs:
 
       - name: Test
         run: GOARCH=amd64 GOOS=linux go test -p 1 ./... -coverprofile=coverage.out
+
+  # The Dockerfiles were only ever built by release.yml, which runs *after*
+  # merge — so a Dockerfile that silently produces a broken image (an empty
+  # async-profiler/build shipped for two months) reached every environment
+  # before anyone noticed. Build them here too, amd64 only to keep it quick.
+  # Keep this matrix in sync with the one in release.yml.
+  images:
+    name: image (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: application-profiler-jvm
+            dockerfile: docker/jvm/alpine/Dockerfile
+          - image: application-profiler-bpf
+            dockerfile: docker/bpf/Dockerfile
+          - image: application-profiler-perf
+            dockerfile: docker/perf/Dockerfile
+          - image: application-profiler-python
+            dockerfile: docker/python/Dockerfile
+          - image: application-profiler-ruby
+            dockerfile: docker/ruby/Dockerfile
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build ${{ matrix.image }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: false
+
+  # Unit tests fake the austin command, so they can't catch austin failing to
+  # read a real interpreter — which every Python memory profile did for any
+  # target whose interpreter path the profiler image lacked. Profile real
+  # Python containers with the freshly built image instead.
+  python-austin-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the python profiler image
+        run: docker build -f docker/python/Dockerfile -t application-profiler-python:e2e .
+
+      - name: Profile real Python targets
+        run: test/e2e/python-austin.sh application-profiler-python:e2e
+
+      # A PID the profiler cannot attach to (a shell or helper process next
+      # to the workload) used to fail the whole run.
+      - name: Profile a Python target next to a non-Python process
+        run: test/e2e/python-austin-multi-pid.sh application-profiler-python:e2e
+
+  # The pprof profiler reads the cause of a failed scrape from wget's stderr,
+  # which unit tests can only fake. Scrape real Go servers with the image's
+  # own wget instead.
+  go-pprof-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the bpf profiler image
+        run: docker build -f docker/bpf/Dockerfile -t application-profiler-bpf:e2e .
+
+      - name: Profile real Go servers
+        run: test/e2e/go-pprof.sh application-profiler-bpf:e2e

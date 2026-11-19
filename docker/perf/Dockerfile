@@ -1,16 +1,18 @@
-FROM golang:1.26.3-bookworm AS agentbuild
+FROM golang:1.26.10-bookworm AS agentbuild
+ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM alpine:3.23.4 AS tools
+FROM alpine:3.24.4 AS tools
 RUN apk add --no-cache git  \
     && git clone https://github.com/brendangregg/FlameGraph
 
-FROM alpine:3.23.4
-RUN apk add --no-cache perf perl procps \
+FROM alpine:3.24.4
+RUN apk upgrade --no-cache  \
+    && apk add --no-cache perf perl procps \
     && mkdir -p /app/FlameGraph
 COPY --from=agentbuild /go/bin/agent /app/agent
 RUN mv /usr/bin/perf /app/perf

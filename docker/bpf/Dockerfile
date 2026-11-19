@@ -1,15 +1,16 @@
-FROM golang:1.26.4-alpine AS agentbuild
+FROM golang:1.26.10-alpine AS agentbuild
+ENV GOTOOLCHAIN=local
 WORKDIR /go/src/github.com/nudgebee/application-profiler
 COPY . /go/src/github.com/nudgebee/application-profiler
 RUN go get -d -v ./...
 WORKDIR /go/src/github.com/nudgebee/application-profiler/cmd/agent
 RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /go/bin/agent
 
-FROM alpine:3.23.4 AS builder
+FROM alpine:3.24.4 AS builder
 RUN apk add --no-cache git  \
     && git clone https://github.com/brendangregg/FlameGraph
 
-FROM alpine:3.23.4
+FROM alpine:3.24.4
 # apk upgrade pulls the latest 3.23 patch level for the base + dependency
 # packages (libssl3/libcrypto3 3.5.6-r0 -> 3.5.7-r0, libexpat, libxml2), which
 # the pinned alpine:3.23.4 snapshot otherwise ships stale.

@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"sync"
 	"time"
 
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -17,6 +18,8 @@ type FakePerfManager interface {
 
 // fakePerfManager is an implementation of the FakePerfManager interface
 type fakePerfManager struct {
+	// mu serialises invoke, which Invoke calls concurrently, once per PID.
+	mu          sync.Mutex
 	fakeMethods map[string]*fakePerfManagerMethod
 }
 
@@ -60,6 +63,8 @@ func (f *fakePerfManagerMethod) InvokedTimes() int {
 }
 
 func (f *fakePerfManager) invoke(*job.ProfilingJob, string) (error, time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var err error
 	var duration time.Duration
 	f.fakeMethods["invoke"].invokes++

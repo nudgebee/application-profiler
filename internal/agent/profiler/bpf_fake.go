@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"sync"
 	"time"
 
 	"github.com/nudgebee/application-profiler/internal/agent/job"
@@ -17,6 +18,8 @@ type FakeBpfManager interface {
 
 // fakeBpfManager is an implementation of the FakeBpfManager interface
 type fakeBpfManager struct {
+	// mu serialises invoke, which Invoke calls concurrently, once per PID.
+	mu          sync.Mutex
 	fakeMethods map[string]*fakeBpfManagerMethod
 }
 
@@ -60,6 +63,8 @@ func (f *fakeBpfManagerMethod) InvokedTimes() int {
 }
 
 func (f *fakeBpfManager) invoke(*job.ProfilingJob, string) (error, time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var err error
 	var duration time.Duration
 	f.fakeMethods["invoke"].invokes++
