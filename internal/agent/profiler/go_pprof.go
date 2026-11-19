@@ -28,6 +28,8 @@ const (
 	// defaultPprofPort is scraped when the target's listening port cannot be
 	// detected.
 	defaultPprofPort = "8080"
+	// goPprofProbeTimeoutSeconds bounds each port probe (busybox wget -T).
+	goPprofProbeTimeoutSeconds = "5"
 )
 
 // wgetHTTPStatus finds the status code in busybox wget's report of an HTTP
@@ -170,21 +172,54 @@ func (p *goPprofManager) convertPprofToRaw(pprofFilePath string) (string, error)
 }
 
 func (m *goPprofManager) fetchProfileFromPID(job *job.ProfilingJob) error {
-	port, portErr := findListeningPortForPID(m.commander, job.PID)
+	ports, portErr := listeningPortsForPID(m.commander, job.PID)
 	if portErr != nil {
 		log.ErrorLogLn(fmt.Sprintf("failed to find listening port for PID %s: %s", job.PID, portErr))
-		port = defaultPprofPort
-		log.DebugLogLn(fmt.Sprintf("using default port %s", port))
+		log.DebugLogLn(fmt.Sprintf("using default port %s", defaultPprofPort))
+		err := m.fetchProfile(job, defaultPprofPort)
+		if err != nil {
+			// The port was a guess, not one the target listens on. Say so, or
+			// "nothing listening on :8080" reads as if the target's own pprof
+			// port were down.
+			return errors.Wrapf(err, "could not detect the listening port (%s), so tried the default :%s",
+				portErr, defaultPprofPort)
+		}
+		return nil
 	}
-	err := m.fetchProfile(job, port)
-	if err != nil && portErr != nil {
-		// The port was a guess, not one the target listens on. Say so, or
-		// "nothing listening on :8080" reads as if the target's own pprof
-		// port were down.
-		return errors.Wrapf(err, "could not detect the listening port (%s), so tried the default :%s",
-			portErr, port)
+	port := ports[0]
+	if len(ports) > 1 {
+		found, err := m.pprofPort(job.PID, ports)
+		if err != nil {
+			return err
+		}
+		port = found
 	}
-	return err
+	return m.fetchProfile(job, port)
+}
+
+// pprofPort is the first of ports that serves /debug/pprof/. A process with
+// more than one listener rarely serves pprof on all of them: a service that
+// puts its API behind a token keeps pprof on a loopback port of its own, which
+// only something inside the pod (this profiler, via nsenter) can reach. Taking
+// whichever port ss happened to list first scraped the API port and failed.
+func (m *goPprofManager) pprofPort(pid string, ports []string) (string, error) {
+	reasons := make([]string, 0, len(ports))
+	for _, port := range ports {
+		targetURL := fmt.Sprintf("http://127.0.0.1:%s/debug/pprof/", port)
+		var stderr bytes.Buffer
+		// Bounded: the probe also reaches listeners that are not HTTP at all,
+		// and one that accepts and never answers must not stall the run.
+		cmd := m.commander.Command(
+			"nsenter", "-t", pid, "-n", "wget", "-T", goPprofProbeTimeoutSeconds, "-qO", "/dev/null", targetURL,
+		)
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err == nil {
+			return port, nil
+		}
+		reasons = append(reasons, pprofScrapeError(port, targetURL, stderr.String(), err).Error())
+	}
+	return "", errors.Errorf("none of the listening ports serves /debug/pprof: %s", strings.Join(reasons, "; "))
 }
 
 // fetchProfile scrapes the profile the job asks for from port and publishes
@@ -230,38 +265,64 @@ func (m *goPprofManager) fetchProfile(job *job.ProfilingJob, port string) error 
 	return m.publisher.Do(job.Compressor, rawFilePath, job.OutputType)
 }
 
-func findListeningPortForPID(commander executil.Commander, pid string) (string, error) {
+// listeningPortsForPID lists the TCP ports the PID listens on, loopback-bound
+// ones first: a loopback listener is there for something inside the pod to
+// use, which is what a pprof port kept off the network looks like.
+func listeningPortsForPID(commander executil.Commander, pid string) ([]string, error) {
 	// nsenter into the PID's network namespace and list listening TCP sockets
 	cmd := commander.Command("nsenter", "-t", pid, "-n", "ss", "-tulnp")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", errors.Wrap(err, "failed to run ss")
+		return nil, errors.Wrap(err, "failed to run ss")
 	}
 
+	var loopback, other []string
+	seen := map[string]bool{}
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.Contains(line, "LISTEN") {
 			continue
 		}
-		// optionally: ensure the line really belongs to our PID
-		if !strings.Contains(line, pid) {
+		// The process column reads users:(("name",pid=42,fd=3)). Match the
+		// whole pid= field: a substring match took PID 42's ports from PID 242.
+		if !strings.Contains(line, "pid="+pid+",") {
 			continue
 		}
 		for _, field := range strings.Fields(line) {
-			// look for any field containing a colon
-			if idx := strings.LastIndex(field, ":"); idx > 0 && idx < len(field)-1 {
-				portPart := field[idx+1:]
-				if _, err := strconv.Atoi(portPart); err == nil {
-					return portPart, nil
+			// The first field with a numeric port is the local address.
+			idx := strings.LastIndex(field, ":")
+			if idx <= 0 || idx >= len(field)-1 {
+				continue
+			}
+			port := field[idx+1:]
+			if _, err := strconv.Atoi(port); err != nil {
+				continue
+			}
+			if !seen[port] {
+				seen[port] = true
+				if isLoopbackAddress(field[:idx]) {
+					loopback = append(loopback, port)
+				} else {
+					other = append(other, port)
 				}
 			}
+			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return nil, err
 	}
-	return "", errors.New("no listening port found for PID")
+	ports := append(loopback, other...)
+	if len(ports) == 0 {
+		return nil, errors.New("no listening port found for PID")
+	}
+	return ports, nil
+}
+
+func isLoopbackAddress(host string) bool {
+	host = strings.Trim(host, "[]")
+	return strings.HasPrefix(host, "127.") || host == "::1" || host == "localhost"
 }
 
 // CleanUp removes temporary profiling files.
